@@ -20,14 +20,14 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const fetchSuggestions = async () => {
-    if (user.skillsKnown.length === 0 && user.skillsToLearn.length === 0) return;
+    if ((!user.skillsKnown || user.skillsKnown.length === 0) && (!user.skillsToLearn || user.skillsToLearn.length === 0)) return;
     
     setLoadingSuggestions(true);
     try {
-        const known = user.skillsKnown.map(s => s.name);
-        const goals = user.skillsToLearn;
+        const known = (user.skillsKnown || []).map(s => s.name);
+        const goals = user.skillsToLearn || [];
         const result = await suggestSkills(known, goals);
-        const filtered = result.skills.filter(s => !known.includes(s) && !goals.includes(s));
+        const filtered = (result.skills || []).filter(s => !known.includes(s) && !goals.includes(s));
         setSuggestions(result);
     } catch (e) {
         console.error("Failed to fetch suggestions", e);
@@ -37,7 +37,7 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
   };
 
   useEffect(() => {
-     if(suggestions.skills.length === 0 && (user.skillsKnown.length > 0 || user.skillsToLearn.length > 0)) {
+     if(suggestions.skills.length === 0 && ((user.skillsKnown && user.skillsKnown.length > 0) || (user.skillsToLearn && user.skillsToLearn.length > 0))) {
         fetchSuggestions();
      }
   }, [user.skillsKnown.length, user.skillsToLearn.length]);

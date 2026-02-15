@@ -19,20 +19,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
   const [loading, setLoading] = useState(true);
   const [skillRecommendations, setSkillRecommendations] = useState<{skills: string[], recommendations?: Record<string, string>, categories?: Record<string, string>}>({skills: []});
 
-  const verifiedSkills = user.skillsKnown.filter(s => s.verified).length;
+  const verifiedSkills = (user.skillsKnown || []).filter(s => s.verified).length;
 
   // Profile Completion Logic
   const missingBio = !user.bio || user.bio.length < 20;
-  const missingSkills = user.skillsKnown.length === 0;
-  const missingGoals = user.skillsToLearn.length === 0;
+  const missingSkills = !user.skillsKnown || user.skillsKnown.length === 0;
+  const missingGoals = !user.skillsToLearn || user.skillsToLearn.length === 0;
   const isProfileIncomplete = missingBio || missingSkills || missingGoals;
 
   const fetchSkillRecommendations = async () => {
-    if (user.skillsKnown.length === 0 && user.skillsToLearn.length === 0) return;
+    if ((!user.skillsKnown || user.skillsKnown.length === 0) && (!user.skillsToLearn || user.skillsToLearn.length === 0)) return;
     
     try {
-      const known = user.skillsKnown.map(s => s.name);
-      const goals = user.skillsToLearn;
+      const known = (user.skillsKnown || []).map(s => s.name);
+      const goals = user.skillsToLearn || [];
       const result = await suggestSkills(known, goals);
       setSkillRecommendations(result);
     } catch (e) {
@@ -49,7 +49,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
 
         // 2. Fetch Exchanges Count
         const requests = await dbService.getRequestsForUser(user.id);
-        const completed = requests.filter(r => r.status === 'completed').length;
+        const completed = (requests || []).filter(r => r.status === 'completed').length;
         setSuccessfulExchangesCount(completed);
 
         // 2b. Fetch Feedback Stats
@@ -62,14 +62,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
 
         // 3. Fetch Recommendations
         const allUsers = await dbService.getUsers();
-        const potentialPeers = allUsers.filter(u => u.id !== user.id);
+        const potentialPeers = (allUsers || []).filter(u => u.id !== user.id);
         const scores = [];
         
         for (const peer of potentialPeers) {
              let score = 0;
              // Simple local heuristic
              // 1. Skill Match
-             const matchingSkills = peer.skillsKnown.filter(s => user.skillsToLearn.some(learnSkill => learnSkill.toLowerCase() === s.name.toLowerCase()));
+             const matchingSkills = (peer.skillsKnown || []).filter(s => (user.skillsToLearn || []).some(learnSkill => learnSkill.toLowerCase() === s.name.toLowerCase()));
              if (matchingSkills.length > 0) {
                  score += 20; // Base score for a match
                  const hasVerifiedMatch = matchingSkills.some(s => s.verified);
@@ -79,8 +79,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
              }
              
              // 2. Bio Keyword Match
-             const myKeywords = user.bio.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-             const peerKeywords = peer.bio.toLowerCase().split(/\s+/);
+             const myKeywords = (user.bio || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+             const peerKeywords = (peer.bio || '').toLowerCase().split(/\s+/);
              const common = myKeywords.filter(k => peerKeywords.includes(k));
              if (common.length > 0) score += 10;
              
@@ -113,8 +113,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
   ];
 
   const verificationData = [
-    { name: 'Verified', value: user.skillsKnown.filter(s => s.verified).length },
-    { name: 'Unverified', value: user.skillsKnown.filter(s => !s.verified).length },
+    { name: 'Verified', value: (user.skillsKnown || []).filter(s => s.verified).length },
+    { name: 'Unverified', value: (user.skillsKnown || []).filter(s => !s.verified).length },
   ];
 
   // Filter out zero values
@@ -266,8 +266,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
                               <div>
                                   <p className="font-medium text-slate-900 dark:text-white">{peer.name}</p>
                                   <div className="flex items-center gap-2 mt-1">
-                                      {peer.skillsKnown
-                                          .filter(s => s.verified && user.skillsToLearn.includes(s.name))
+                                      {(peer.skillsKnown || [])
+                                          .filter(s => s.verified && (user.skillsToLearn || []).includes(s.name))
                                           .slice(0, 2)
                                           .map((skill, idx) => (
                                               <span key={idx} className="text-xs bg-emerald-100 dark:bg-emerald-400/10 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30">
