@@ -86,44 +86,54 @@ export const apiService = {
 
   // --- AUTH ---
   login: async (email: string, password: string): Promise<User> => {
-    await delay(100); // Reduced from 500ms
-    const users = await apiService.getUsers();
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    console.log('🔐 Frontend login attempt for:', email);
     
-    // Simple password check (In a real app, use hashing)
-    if (user && user.password === password) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Login failed');
+      }
+      
+      const user = await response.json();
       apiService.setSession(user);
+      console.log('✅ Frontend login successful for:', email);
       return user;
+      
+    } catch (error) {
+      console.error('❌ Frontend login error:', error);
+      throw error;
     }
-    throw new Error("Invalid email or password");
   },
 
   signup: async (name: string, email: string, password: string): Promise<User> => {
-    await delay(200); // Reduced from 800ms
+    console.log('🚀 Frontend signup attempt for:', email);
     
-    // Check if user already exists
-    const users = await apiService.getUsers();
-    if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
-      throw new Error("Email already exists");
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Signup failed');
+      }
+      
+      const user = await response.json();
+      console.log('✅ Frontend signup successful for:', email);
+      return user;
+      
+    } catch (error) {
+      console.error('❌ Frontend signup error:', error);
+      throw error;
     }
-
-    // Default Avatar (Initial Initials/Placeholder)
-    const avatarUrl = `https://ui-avatars.com/api/?background=6366f1&color=fff&name=${encodeURIComponent(name)}`;
-    
-    const newUser: User = {
-      id: generateId(),
-      name: name.trim(),
-      email: email.trim(),
-      password: password,
-      bio: '',
-      avatar: avatarUrl,
-      skillsKnown: [],
-      skillsToLearn: [],
-      rating: 5.0
-    };
-
-    await apiService.saveUser(newUser);
-    return newUser;
   },
 
   googleLogin: async (): Promise<User> => {

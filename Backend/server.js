@@ -9,11 +9,46 @@ import { User, ExchangeRequest, ExchangeFeedback, Message, Quiz, QuizAttempt } f
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Production logging middleware
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const method = req.method;
+  const url = req.url;
+  const ip = req.ip || req.connection.remoteAddress;
+  
+  console.log(`[${timestamp}] ${method} ${url} - IP: ${ip}`);
+  
+  // Log request body for POST/PUT requests (without sensitive data)
+  if (['POST', 'PUT', 'PATCH'].includes(method) && req.body) {
+    const sanitizedBody = { ...req.body };
+    // Remove password fields from logs
+    if (sanitizedBody.password) delete sanitizedBody.password;
+    if (sanitizedBody.confirmPassword) delete sanitizedBody.confirmPassword;
+    console.log(`[${timestamp}] Request body:`, sanitizedBody);
+  }
+  
+  next();
+});
+
 app.use(cors({ origin: true }));
 app.use(express.json());
 
+// Environment validation
+console.log('🔍 Environment Variables Check:');
+console.log(`✅ NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+console.log(`✅ PORT: ${PORT}`);
+console.log(`✅ MONGODB_URI: ${process.env.MONGODB_URI ? 'Set' : '❌ NOT SET'}`);
+console.log(`✅ JWT_SECRET: ${process.env.JWT_SECRET ? 'Set' : '❌ NOT SET'}`);
+console.log(`✅ MISTRAL_API_KEY: ${process.env.MISTRAL_API_KEY ? 'Set' : '❌ NOT SET'}`);
+
 // Connect to MongoDB before starting server
-await connectDB();
+try {
+  await connectDB();
+  console.log('🚀 Database connection established, starting server...');
+} catch (error) {
+  console.error('❌ Failed to connect to database:', error.message);
+  process.exit(1);
+}
 
 // Helper mappers
 function mapUserDoc(doc) {
@@ -1204,10 +1239,155 @@ Requirements:
   }
 });
 
+// Authentication Endpoints
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    console.log('🚀 Signup request received:', { email: req.body.email });
+    
+    const { name, email, password } = req.body;
+    
+    // Validate input
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        message: 'Name, email, and password are required' 
+      });
+    }
+    
+    if (name.trim().length < 2) {
+      return res.status(400).json({ 
+        error: 'Invalid name',
+        message: 'Name must be at least 2 characters long' 
+      });
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        error: 'Invalid email',
+        message: 'Please enter a valid email address' 
+      });
+    }
+    
+    if (password.length < 8) {
+      return res.status(400).json({ 
+        error: 'Invalid password',
+        message: 'Password must be at least 8 characters long' 
+      });
+    }
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: email.trim().toLowerCase() });
+    if (existingUser) {
+      return res.status(409).json({ 
+        error: 'Email already exists',
+        message: 'An account with this email already exists' 
+      });
+    }
+    
+    // Create new user
+    const defaultAvatar = `https://ui-avatars.com/api/?background=6366f1&color=fff&name=${encodeURIComponent(name.trim())}`;
+    
+    const newUser = new User({
+      _id: crypto.randomUUID(),
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password: password, // In production, hash this password
+      avatar: defaultAvatar,
+      bio: '',
+      skillsKnown: [],
+      skillsToLearn: [],
+      rating: 5.0,
+      learningHours: 0,
+      weeklyActivity: 0
+    });
+    
+    await newUser.save();
+    
+    console.log('✅ User created successfully:', { id: newUser._id, email: newUser.email });
+    
+    // Return user without password
+    const { password: _, ...userResponse } = newUser.toObject();
+    res.status(201).json(userResponse);
+    
+  } catch (error) {
+    console.error('❌ Signup error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Failed to create account. Please try again.' 
+    });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    console.log('🔐 Login request received:', { email: req.body.email });
+    
+    const { email, password } = req.body;
+    
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ 
+        error: 'Missing credentials',
+        message: 'Email and password are required' 
+      });
+    }
+    
+    // Find user
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ 
+        error: 'Invalid credentials',
+        message: 'Invalid email or password' 
+      });
+    }
+    
+    // Check password (in production, use hashed passwords)
+    if (user.password !== password) {
+      return res.status(401).json({ 
+        error: 'Invalid credentials',
+        message: 'Invalid email or password' 
+      });
+    }
+    
+    console.log('✅ Login successful:', { id: user._id, email: user.email });
+    
+    // Return user without password
+    const { password: _, ...userResponse } = user.toObject();
+    res.json(userResponse);
+    
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Login failed. Please try again.' 
+    });
+  }
+});
+
 app.get('/', (req, res) => {
   res.send('SkillVouch MongoDB API is running');
 });
 
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('❌ Unhandled error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: 'Something went wrong. Please try again.' 
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    error: 'Not found',
+    message: 'The requested resource was not found' 
+  });
+});
+
 app.listen(PORT, () => {
-  console.log(`MongoDB backend listening on http://localhost:${PORT}`);
+  console.log(`🚀 MongoDB backend listening on port ${PORT}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 MongoDB connection: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
 });

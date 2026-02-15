@@ -129,24 +129,56 @@ export default function App() {
     e.preventDefault();
     setAuthError('');
     setIsSubmitting(true);
+    
     try {
-        const loggedInUser = await dbService.login(email, password);
-        setUser(loggedInUser);
-        setCurrentView(View.DASHBOARD);
-        setNotification({ message: `Welcome back, ${loggedInUser.name.split(' ')[0]}!`, type: 'success' });
+      console.log('🔐 Starting login process for:', email);
+      
+      const loggedInUser = await dbService.login(email.trim(), password);
+      setUser(loggedInUser);
+      setCurrentView(View.DASHBOARD);
+      setNotification({ message: `Welcome back, ${loggedInUser.name.split(' ')[0]}!`, type: 'success' });
+      
+      console.log('✅ Login successful for:', email);
+      
     } catch (err: any) {
-        setAuthError(err.message || 'Invalid email or password.');
-        console.error(err);
+      console.error('❌ Login failed:', err);
+      setAuthError(err.message || 'Invalid email or password.');
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
+  };
+
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePassword = (password: string): boolean => {
+    return password.length >= 8;
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+    
+    // JavaScript validation instead of HTML patterns
     if (!fullName || !email || !password || !confirmPassword) {
       setAuthError('Please fill in all required fields.');
+      return;
+    }
+
+    if (fullName.trim().length < 2) {
+      setAuthError('Full name must be at least 2 characters long.');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setAuthError('Please enter a valid email address.');
+      return;
+    }
+
+    if (!validatePassword(password)) {
+      setAuthError('Password must be at least 8 characters long.');
       return;
     }
 
@@ -157,20 +189,27 @@ export default function App() {
 
     setIsSubmitting(true);
     try {
+      console.log('🚀 Starting signup process for:', email);
+      
       // Create account but do NOT auto-login
-      // Removed location from signup
-      await dbService.signup(fullName, email, password);
+      await dbService.signup(fullName.trim(), email.trim(), password);
+      
+      console.log('✅ Signup successful for:', email);
       
       // Redirect to Login view
       setCurrentView(View.LOGIN);
       setNotification({ message: 'Account created successfully! Please log in.', type: 'success' });
       
-      // Clear passwords
+      // Clear form
+      setFullName('');
+      setEmail('');
       setPassword('');
       setConfirmPassword('');
       
     } catch (err: any) {
-      setAuthError(err.message || 'Signup failed.');
+      console.error('❌ Signup failed:', err);
+      const errorMessage = err.message || 'Signup failed. Please try again.';
+      setAuthError(errorMessage);
     } finally {
         setIsSubmitting(false);
     }
@@ -305,6 +344,7 @@ export default function App() {
                 placeholder="Email Address" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -315,6 +355,7 @@ export default function App() {
                 placeholder="Password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -368,6 +409,8 @@ export default function App() {
                 placeholder="Full Name" 
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+                required
+                minLength={2}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -381,6 +424,7 @@ export default function App() {
                 placeholder="Email Address" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -391,6 +435,8 @@ export default function App() {
                 placeholder="Password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -403,6 +449,8 @@ export default function App() {
                 placeholder="Confirm Password" 
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={8}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
