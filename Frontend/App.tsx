@@ -4,8 +4,9 @@ import axios from 'axios';
 // Import original components
 import { Logo } from './src/components/Logo';
 import { LandingPage } from './src/components/LandingPage';
-import { LoginPage } from './src/components/LoginPage';
-import { SignupPage } from './src/components/SignupPage';
+import { AuthLayout } from './src/components/AuthLayout';
+import { PremiumLoginPage } from './src/components/PremiumLoginPage';
+import { PremiumSignupPage } from './src/components/PremiumSignupPage';
 import { Dashboard } from './src/components/Dashboard';
 import { ChatBot } from './src/components/ChatBot';
 import { RoadmapView } from './src/components/RoadmapView';
@@ -186,17 +187,29 @@ function App() {
         return <LandingPage onNavigate={handleNavigate} />;
       case View.LOGIN:
         return (
-          <LoginPage 
-            onLoginSuccess={handleLoginSuccess}
-            onBackToLanding={handleBackToLanding}
-          />
+          <AuthLayout 
+            title="SkillVouch AI"
+            subtitle="Connect • Learn • Grow"
+            onBackToHome={handleBackToLanding}
+          >
+            <PremiumLoginPage 
+              onLoginSuccess={handleLoginSuccess}
+              onBackToHome={handleBackToLanding}
+            />
+          </AuthLayout>
         );
       case View.SIGNUP:
         return (
-          <SignupPage 
-            onSignupSuccess={handleSignupSuccess}
-            onBackToLanding={handleBackToLanding}
-          />
+          <AuthLayout 
+            title="SkillVouch AI"
+            subtitle="Connect • Learn • Grow"
+            onBackToHome={handleBackToLanding}
+          >
+            <PremiumSignupPage 
+              onSignupSuccess={handleSignupSuccess}
+              onBackToHome={handleBackToLanding}
+            />
+          </AuthLayout>
         );
       default:
         return <LandingPage onNavigate={handleNavigate} />;
