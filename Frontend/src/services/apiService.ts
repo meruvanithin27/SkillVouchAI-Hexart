@@ -53,8 +53,13 @@ export const apiService = {
   // --- USER MGMT ---
   getUsers: async (): Promise<User[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await API.get('/api/users');
-    return response.data;
+    try {
+      const response = await API.get('/api/users');
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      return [];
+    }
   },
 
   getUserById: async (id: string): Promise<User | undefined> => {
@@ -135,8 +140,13 @@ export const apiService = {
   },
 
   getQuizResults: async () => {
-    const response = await API.get('/api/quiz/results');
-    return response.data.data.results;
+    try {
+      const response = await API.get('/api/quiz/results');
+      return response.data?.data?.results || [];
+    } catch (error) {
+      console.error('Failed to fetch quiz results:', error);
+      return [];
+    }
   },
 
   // --- PROFILE ---
@@ -219,8 +229,13 @@ export const apiService = {
 
   getRequestsForUser: async (userId: string): Promise<ExchangeRequest[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await API.get(`/api/requests?userId=${userId}`);
-    return response.data;
+    try {
+      const response = await API.get(`/api/requests?userId=${userId}`);
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch requests for user:', error);
+      return [];
+    }
   },
 
   updateExchangeRequestStatus: async (id: string, status: ExchangeRequest['status']): Promise<{ success: true; status: ExchangeRequest['status']; completedAt?: number; }> => {
@@ -235,8 +250,13 @@ export const apiService = {
   },
 
   getReceivedFeedback: async (userId: string): Promise<ExchangeFeedback[]> => {
-    const response = await API.get(`/api/feedback/received?userId=${userId}`);
-    return response.data;
+    try {
+      const response = await API.get(`/api/feedback/received?userId=${userId}`);
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch received feedback:', error);
+      return [];
+    }
   },
 
   getFeedbackStats: async (userId: string): Promise<{ avgStars: number; count: number }> => {
@@ -263,8 +283,13 @@ export const apiService = {
   },
 
   getConversation: async (user1Id: string, user2Id: string): Promise<Message[]> => {
-    const response = await API.get(`/api/messages/conversation?user1Id=${user1Id}&user2Id=${user2Id}`);
-    return response.data;
+    try {
+      const response = await API.get(`/api/messages/conversation?user1Id=${user1Id}&user2Id=${user2Id}`);
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch conversation:', error);
+      return [];
+    }
   },
 
   subscribeToConversation: (user1Id: string, user2Id: string, callback: (messages: Message[]) => void) => {
@@ -284,8 +309,13 @@ export const apiService = {
 
   getConversations: async (): Promise<User[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await API.get('/api/messages/conversations');
-    return response.data;
+    try {
+      const response = await API.get('/api/messages/conversations');
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch conversations:', error);
+      return [];
+    }
   },
 
   // --- QUIZ ---

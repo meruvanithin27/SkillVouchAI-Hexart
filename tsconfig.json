@@ -11,14 +11,10 @@
     "noImplicitAny": false,
     "noImplicitReturns": false,
     "noImplicitThis": false,
-    "suppressImplicitAnyIndexErrors": true,
-    "noStrictGenericChecks": true,
-    "noImplicitAny": false,
     "strictNullChecks": false,
     "strictFunctionTypes": false,
     "strictBindCallApply": false,
     "strictPropertyInitialization": false,
-    "noImplicitThis": false,
     "alwaysStrict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
@@ -44,8 +40,5 @@
     "build"
   ],
   "compileOnSave": false,
-  "buildOnSave": false,
-  "ts-node": {
-    "esm": false
-  }
+  "buildOnSave": false
 }
