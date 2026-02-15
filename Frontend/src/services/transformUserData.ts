@@ -14,8 +14,10 @@ export const transformUserData = (backendUser: any): User => {
     verifiedAt: skill.verifiedAt || null
   }));
 
-  // Transform skillsToLearn (should be array of strings)
-  const skillsToLearn: string[] = backendUser.skillsToLearn || [];
+  // Transform skillsToLearn from objects to strings (extract skillName)
+  const skillsToLearn: string[] = (backendUser.skillsToLearn || []).map((skill: any) => 
+    typeof skill === 'string' ? skill : (skill.skillName || skill.name || '')
+  ).filter((skill: string) => skill.length > 0);
 
   // Return transformed user object
   return {

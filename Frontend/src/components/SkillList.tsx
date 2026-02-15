@@ -272,10 +272,10 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
                         <div className="bg-blue-100 dark:bg-blue-500/20 p-2 rounded text-blue-600 dark:text-blue-400">
                           <BookOpen className="w-5 h-5" />
                         </div>
-                        <span className="font-medium text-slate-900 dark:text-slate-100">{skill}</span>
+                        <span className="font-medium text-slate-900 dark:text-slate-100">{skill.skillName || skill}</span>
                       </div>
                       <button
-                        onClick={() => handleRemoveSkill(skill, false)}
+                        onClick={() => handleRemoveSkill(skill.skillName || skill, false)}
                         className="text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 p-2"
                       >
                         <Trash2 className="w-4 h-4" />
