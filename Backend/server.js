@@ -611,7 +611,59 @@ app.get('/api/users/:id', protect, async (req, res) => {
   }
 });
 
-// Quiz generation endpoint
+// Quiz generation endpoint - GET version for testing
+app.get('/api/quiz', protect, async (req, res) => {
+  try {
+    const { skill, difficulty = 'medium' } = req.query;
+
+    if (!skill || typeof skill !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: "Skill parameter is required"
+      });
+    }
+
+    console.log(`🎯 GET Generating dynamic AI quiz for skill: ${skill} (difficulty: ${difficulty})`);
+
+    // Validate environment
+    if (!process.env.MISTRAL_API_KEY) {
+      console.error('❌ MISTRAL_API_KEY not found in environment variables');
+      return res.status(500).json({
+        success: false,
+        message: "Quiz generation service not configured properly."
+      });
+    }
+
+    // Generate dynamic quiz questions using AI
+    const quizQuestions = await generateDynamicQuizQuestions(skill, difficulty);
+
+    // Validate quiz questions
+    if (!quizQuestions || quizQuestions.length === 0) {
+      console.error('❌ No questions generated from AI');
+      return res.status(500).json({
+        success: false,
+        message: "Quiz generation failed. Please try again."
+      });
+    }
+
+    console.log(`✅ Generated ${quizQuestions.length} dynamic quiz questions for ${skill}`);
+
+    res.json({
+      success: true,
+      skill: skill,
+      questions: quizQuestions
+    });
+
+  } catch (error) {
+    console.error('❌ Quiz generation error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Quiz generation failed. Please try again."
+    });
+  }
+});
+
+// Quiz generation endpoint - 100% Dynamic AI-based
 app.post('/quiz/generate', protect, async (req, res) => {
   try {
     const dbStatus = getDatabaseStatus();
@@ -631,143 +683,175 @@ app.post('/quiz/generate', protect, async (req, res) => {
       });
     }
 
-    console.log(`🎯 Generating quiz for skill: ${skill} (difficulty: ${difficulty})`);
+    console.log(`🎯 Generating dynamic AI quiz for skill: ${skill} (difficulty: ${difficulty})`);
 
-    // Generate quiz questions based on skill
-    const quizQuestions = generateQuizQuestions(skill, difficulty);
+    // Validate environment
+    if (!process.env.MISTRAL_API_KEY) {
+      console.error('❌ MISTRAL_API_KEY not found in environment variables');
+      return res.status(500).json({
+        success: false,
+        message: "Quiz generation service not configured properly."
+      });
+    }
 
-    console.log(`✅ Generated ${quizQuestions.length} quiz questions for ${skill}`);
+    // Generate dynamic quiz questions using AI
+    const quizQuestions = await generateDynamicQuizQuestions(skill, difficulty);
+
+    // Validate quiz questions
+    if (!quizQuestions || quizQuestions.length === 0) {
+      console.error('❌ No questions generated from AI');
+      return res.status(500).json({
+        success: false,
+        message: "Quiz generation failed. Please try again."
+      });
+    }
+
+    console.log(`✅ Generated ${quizQuestions.length} dynamic quiz questions for ${skill}`);
 
     res.json({
       success: true,
-      message: "Quiz generated successfully",
-      data: {
-        skill: skill,
-        difficulty: difficulty,
-        questions: quizQuestions,
-        timeLimit: quizQuestions.length * 30 // 30 seconds per question
-      }
+      skill: skill,
+      questions: quizQuestions
     });
 
   } catch (error) {
     console.error('❌ Quiz generation error:', error);
     res.status(500).json({
       success: false,
-      message: "Failed to generate quiz. Please try again."
+      message: "Quiz generation failed. Please try again."
     });
   }
 });
 
-// Helper function to generate quiz questions
-function generateQuizQuestions(skill, difficulty) {
-  const questionTemplates = {
-    beginner: [
-      {
-        question: `What is the basic concept of ${skill}?`,
-        options: [
-          "A fundamental building block",
-          "An advanced technique", 
-          "A deprecated method",
-          "A theoretical concept"
-        ],
-        correct: 0
-      },
-      {
-        question: `Which of the following is a common use case for ${skill}?`,
-        options: [
-          "Web development",
-          "Data analysis",
-          "Mobile applications",
-          "All of the above"
-        ],
-        correct: 3
-      },
-      {
-        question: `What is the primary benefit of using ${skill}?`,
-        options: [
-          "Improved performance",
-          "Better code organization",
-          "Enhanced user experience",
-          "All of the above"
-        ],
-        correct: 3
-      }
-    ],
-    medium: [
-      {
-        question: `Which design pattern is commonly associated with ${skill}?`,
-        options: [
-          "Singleton pattern",
-          "Observer pattern",
-          "Factory pattern",
-          "Depends on the specific use case"
-        ],
-        correct: 3
-      },
-      {
-        question: `What is the best practice for error handling in ${skill}?`,
-        options: [
-          "Ignore errors",
-          "Use try-catch blocks",
-          "Return null values",
-          "Log errors to console"
-        ],
-        correct: 1
-      },
-      {
-        question: `How would you optimize performance when working with ${skill}?`,
-        options: [
-          "Use caching mechanisms",
-          "Minimize database queries",
-          "Implement lazy loading",
-          "All of the above"
-        ],
-        correct: 3
-      }
-    ],
-    advanced: [
-      {
-        question: `What is the most complex challenge when implementing ${skill} at scale?`,
-        options: [
-          "Memory management",
-          "Concurrency issues",
-          "Network latency",
-          "All of the above"
-        ],
-        correct: 3
-      },
-      {
-        question: `Which architectural pattern best suits large-scale ${skill} applications?`,
-        options: [
-          "Monolithic architecture",
-          "Microservices architecture",
-          "Serverless architecture",
-          "Depends on requirements"
-        ],
-        correct: 3
-      },
-      {
-        question: `How would you handle security vulnerabilities specific to ${skill}?`,
-        options: [
-          "Input validation",
-          "Authentication and authorization",
-          "Encryption and hashing",
-          "All of the above"
-        ],
-        correct: 3
-      }
-    ]
-  };
-
-  const questions = questionTemplates[difficulty] || questionTemplates.medium;
+// Dynamic AI Quiz Generation - 100% Skill-specific
+async function generateDynamicQuizQuestions(skill, difficulty) {
+  const maxRetries = 2;
   
-  // Randomize questions and add IDs
-  return questions.map((q, index) => ({
-    id: `q_${index + 1}`,
-    ...q,
-    explanation: `This question tests your understanding of ${skill} concepts.`
-  }));
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🤖 AI Quiz Generation Attempt ${attempt}/${maxRetries} for ${skill}`);
+      
+      // Strict AI prompt for JSON-only output
+      const prompt = `Generate exactly 5 multiple-choice questions about ${skill} at ${difficulty} level.
+
+You MUST return ONLY valid JSON. Do NOT include explanations. Do NOT include markdown. Return exactly this structure:
+
+{
+  "questions": [
+    {
+      "question": "string",
+      "options": ["A", "B", "C", "D"],
+      "correctAnswer": "A"
+    }
+  ]
 }
+
+Requirements:
+- All questions must be specifically about ${skill}
+- Options must be realistic but clearly distinguishable
+- correctAnswer must match one of the options exactly
+- Questions must be appropriate for ${difficulty} level`;
+
+      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'mistral-tiny',
+          messages: [
+            {
+              role: 'system',
+              content: 'You MUST return ONLY valid JSON. No explanations, no markdown, just JSON.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const rawResponse = await response.text();
+      console.log('📥 Raw AI Response:', rawResponse);
+
+      // Extract JSON safely
+      let jsonResponse;
+      try {
+        // Find JSON in the response (in case there's extra text)
+        const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error('No JSON found in AI response');
+        }
+        
+        jsonResponse = JSON.parse(jsonMatch[0]);
+        console.log('📊 Parsed JSON Response:', jsonResponse);
+      } catch (parseError) {
+        console.error('❌ JSON Parse Error:', parseError);
+        throw new Error(`Invalid JSON from AI: ${parseError.message}`);
+      }
+
+      // Validate response structure
+      if (!jsonResponse.questions || !Array.isArray(jsonResponse.questions)) {
+        throw new Error('Missing or invalid questions array in AI response');
+      }
+
+      if (jsonResponse.questions.length === 0) {
+        throw new Error('Empty questions array returned from AI');
+      }
+
+      // Validate each question
+      const validatedQuestions = jsonResponse.questions.map((q, index) => {
+        if (!q.question || typeof q.question !== 'string') {
+          throw new Error(`Question ${index + 1}: Missing or invalid question text`);
+        }
+        
+        if (!Array.isArray(q.options) || q.options.length !== 4) {
+          throw new Error(`Question ${index + 1}: Must have exactly 4 options`);
+        }
+        
+        if (!q.correctAnswer || typeof q.correctAnswer !== 'string') {
+          throw new Error(`Question ${index + 1}: Missing or invalid correctAnswer`);
+        }
+        
+        if (!q.options.includes(q.correctAnswer)) {
+          throw new Error(`Question ${index + 1}: correctAnswer must match one of the options`);
+        }
+
+        // Convert to frontend format
+        return {
+          id: `q_${index + 1}`,
+          question: q.question,
+          options: q.options,
+          correct: q.options.indexOf(q.correctAnswer),
+          explanation: `This question tests your knowledge of ${skill}.`
+        };
+      });
+
+      console.log(`✅ Successfully generated and validated ${validatedQuestions.length} questions`);
+      return validatedQuestions;
+
+    } catch (error) {
+      console.error(`❌ Quiz generation attempt ${attempt} failed:`, error.message);
+      
+      if (attempt === maxRetries) {
+        throw new Error(`Quiz generation failed after ${maxRetries} attempts: ${error.message}`);
+      }
+      
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+}
+
+// Remove old static template function - NO FALLBACKS ALLOWED
 
 // Root route
 app.get("/", (req, res) => {
@@ -779,7 +863,7 @@ app.get("/", (req, res) => {
       version: "1.0.0",
       status: "running",
       database: dbStatus,
-      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile", "/api/users", "/api/users/:id", "/quiz/generate"]
+      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile", "/api/users", "/api/users/:id", "/quiz/generate", "/api/quiz"]
     }
   });
 });
