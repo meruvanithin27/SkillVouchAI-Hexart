@@ -101,11 +101,45 @@ export const apiService = {
     }
   },
 
-  // --- PROFILE ---
-  getProfile: async (): Promise<User> => {
-    const response = await API.get('/auth/profile');
+  // --- SKILL MANAGEMENT - Production Ready ---
+  addKnownSkill: async (skillName: string, level: string = 'Beginner') => {
+    const response = await API.post('/skills/known', { skillName, level });
     return response.data.data.user;
   },
+
+  addSkillToLearn: async (skillName: string, priority: string = 'Medium') => {
+    const response = await API.post('/skills/learn', { skillName, priority });
+    return response.data.data.user;
+  },
+
+  removeKnownSkill: async (skillName: string) => {
+    const response = await API.delete(`/skills/known/${encodeURIComponent(skillName)}`);
+    return response.data.data.user;
+  },
+
+  removeSkillToLearn: async (skillName: string) => {
+    const response = await API.delete(`/skills/learn/${encodeURIComponent(skillName)}`);
+    return response.data.data.user;
+  },
+
+  // Enhanced profile fetch
+  getProfile: async (): Promise<User> => {
+    const response = await API.get('/user/profile');
+    return response.data.data.user;
+  },
+
+  // --- QUIZ RESULTS ---
+  saveQuizResult: async (skillName: string, score: number, questions: any[], level?: string) => {
+    const response = await API.post('/quiz/result', { skillName, score, questions, level });
+    return response.data.data;
+  },
+
+  getQuizResults: async () => {
+    const response = await API.get('/quiz/results');
+    return response.data.data.results;
+  },
+
+  // --- PROFILE ---
 
   // --- AUTH ---
   login: async (email: string, password: string): Promise<User> => {

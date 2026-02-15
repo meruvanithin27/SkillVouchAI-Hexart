@@ -190,29 +190,105 @@ const protect = async (req, res, next) => {
   }
 };
 
-// User schema
+// Production-ready User Schema
 const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  name: { type: String, default: '' },
   avatar: { type: String, default: '' },
-  skillsKnown: [{
-    id: { type: String, required: true },
-    name: { type: String, required: true },
-    verified: { type: Boolean, default: false },
-    score: { type: Number, default: 0 }
-  }],
-  skillsToLearn: [{ type: String }],
   bio: { type: String, default: '' },
   discordLink: { type: String },
   rating: { type: Number, default: 5, min: 1, max: 5 },
+  totalReviews: { type: Number, default: 0 },
+  
+  // Properly structured known skills
+  knownSkills: [{
+    skillName: { type: String, required: true },
+    level: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced', 'Expert'], default: 'Beginner' },
+    verificationStatus: { type: String, enum: ['Pending', 'Verified', 'Failed'], default: 'Pending' },
+    score: { type: Number, min: 0, max: 100, default: 0 },
+    verifiedAt: { type: Date }
+  }],
+  
+  // Properly structured skills to learn
+  skillsToLearn: [{
+    skillName: { type: String, required: true },
+    priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
+    roadmapId: { type: String }
+  }],
+  
   languages: [{ type: String }],
   preferredLanguage: { type: String, default: 'English' },
   availability: [{ type: String }],
   createdAt: { type: Date, default: Date.now }
 });
 
+// Quiz Result Schema
+const quizResultSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  skillName: { type: String, required: true },
+  score: { type: Number, min: 0, max: 100, required: true },
+  level: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced', 'Expert'], required: true },
+  questions: [{
+    question: { type: String, required: true },
+    options: [{ type: String, required: true }],
+    correctAnswer: { type: String, required: true },
+    userAnswer: { type: String, required: true }
+  }],
+  completedAt: { type: Date, default: Date.now }
+});
+
+// Exchange Schema
+const exchangeSchema = new mongoose.Schema({
+  requesterId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  receiverId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  offeredSkill: { type: String, required: true },
+  requestedSkill: { type: String, required: true },
+  status: { type: String, enum: ['Pending', 'Accepted', 'Rejected', 'Completed'], default: 'Pending' },
+  ratingGiven: { type: Number, min: 1, max: 5 },
+  feedbackComment: { type: String },
+  createdAt: { type: Date, default: Date.now },
+  completedAt: { type: Date }
+});
+
+// Message Schema
+const messageSchema = new mongoose.Schema({
+  senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  receiverId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  message: { type: String, required: true },
+  isRead: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now }
+});
+
+// Roadmap Schema
+const roadmapSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  skillName: { type: String, required: true },
+  steps: [{
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    duration: { type: String, required: true },
+    resources: [{ type: String }]
+  }],
+  generatedAt: { type: Date, default: Date.now }
+});
+
+// Create indexes for performance
+userSchema.index({ email: 1 });
+userSchema.index({ 'knownSkills.skillName': 1 });
+userSchema.index({ 'skillsToLearn.skillName': 1 });
+
+quizResultSchema.index({ userId: 1, skillName: 1 }, { unique: true });
+exchangeSchema.index({ requesterId: 1, receiverId: 1 });
+messageSchema.index({ senderId: 1, receiverId: 1 });
+messageSchema.index({ receiverId: 1, isRead: 1 });
+roadmapSchema.index({ userId: 1, skillName: 1 }, { unique: true });
+
 const User = mongoose.model("User", userSchema);
+const QuizResult = mongoose.model("QuizResult", quizResultSchema);
+const Exchange = mongoose.model("Exchange", exchangeSchema);
+const Message = mongoose.model("Message", messageSchema);
+const Roadmap = mongoose.model("Roadmap", roadmapSchema);
 
 // Database status helper
 const getDatabaseStatus = () => {
@@ -625,6 +701,235 @@ app.get('/api/users/:id', protect, async (req, res) => {
   }
 });
 
+// Production-ready skill management endpoints
+
+// Add known skill - uses $push to prevent array overwriting
+app.post('/api/skills/known', protect, async (req, res) => {
+  try {
+    const { skillName, level = 'Beginner' } = req.body;
+    const userId = req.user._id;
+
+    if (!skillName || typeof skillName !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: "Skill name is required"
+      });
+    }
+
+    console.log(`➕ Adding known skill "${skillName}" for user ${userId}`);
+
+    // Check for duplicate (case-insensitive)
+    const existingUser = await User.findById(userId);
+    const duplicateSkill = existingUser.knownSkills.find(
+      skill => skill.skillName.toLowerCase() === skillName.toLowerCase()
+    );
+
+    if (duplicateSkill) {
+      return res.status(409).json({
+        success: false,
+        message: "Skill already exists in known skills"
+      });
+    }
+
+    // Use $push to add skill without overwriting array
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { 
+        $push: { 
+          knownSkills: {
+            skillName,
+            level,
+            verificationStatus: 'Pending',
+            score: 0,
+            verifiedAt: null
+          }
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    console.log(`✅ Successfully added known skill "${skillName}" for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: "Skill added successfully",
+      data: { user: updatedUser }
+    });
+
+  } catch (error) {
+    console.error('❌ Add known skill error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to add skill"
+    });
+  }
+});
+
+// Add skill to learn - uses $push to prevent array overwriting
+app.post('/api/skills/learn', protect, async (req, res) => {
+  try {
+    const { skillName, priority = 'Medium' } = req.body;
+    const userId = req.user._id;
+
+    if (!skillName || typeof skillName !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: "Skill name is required"
+      });
+    }
+
+    console.log(`➕ Adding skill to learn "${skillName}" for user ${userId}`);
+
+    // Check for duplicate (case-insensitive)
+    const existingUser = await User.findById(userId);
+    const duplicateSkill = existingUser.skillsToLearn.find(
+      skill => skill.skillName.toLowerCase() === skillName.toLowerCase()
+    );
+
+    if (duplicateSkill) {
+      return res.status(409).json({
+        success: false,
+        message: "Skill already exists in learning goals"
+      });
+    }
+
+    // Use $push to add skill without overwriting array
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { 
+        $push: { 
+          skillsToLearn: {
+            skillName,
+            priority,
+            roadmapId: null
+          }
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    console.log(`✅ Successfully added skill to learn "${skillName}" for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: "Learning goal added successfully",
+      data: { user: updatedUser }
+    });
+
+  } catch (error) {
+    console.error('❌ Add skill to learn error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to add learning goal"
+    });
+  }
+});
+
+// Remove known skill - uses $pull to remove specific skill
+app.delete('/api/skills/known/:skillName', protect, async (req, res) => {
+  try {
+    const { skillName } = req.params;
+    const userId = req.user._id;
+
+    console.log(`➖ Removing known skill "${skillName}" for user ${userId}`);
+
+    // Use $pull to remove specific skill without overwriting array
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { 
+        $pull: { 
+          knownSkills: { skillName }
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    console.log(`✅ Successfully removed known skill "${skillName}" for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: "Skill removed successfully",
+      data: { user: updatedUser }
+    });
+
+  } catch (error) {
+    console.error('❌ Remove known skill error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to remove skill"
+    });
+  }
+});
+
+// Remove skill to learn - uses $pull to remove specific skill
+app.delete('/api/skills/learn/:skillName', protect, async (req, res) => {
+  try {
+    const { skillName } = req.params;
+    const userId = req.user._id;
+
+    console.log(`➖ Removing skill to learn "${skillName}" for user ${userId}`);
+
+    // Use $pull to remove specific skill without overwriting array
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { 
+        $pull: { 
+          skillsToLearn: { skillName }
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    console.log(`✅ Successfully removed skill to learn "${skillName}" for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: "Learning goal removed successfully",
+      data: { user: updatedUser }
+    });
+
+  } catch (error) {
+    console.error('❌ Remove skill to learn error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to remove learning goal"
+    });
+  }
+});
+
+// Enhanced profile endpoint - always returns latest DB data
+app.get('/api/user/profile', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    console.log(`📋 Fetching fresh profile for user ${userId}`);
+
+    const freshUser = await User.findById(userId);
+    
+    if (!freshUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    console.log(`📊 Profile data: ${freshUser.knownSkills.length} known skills, ${freshUser.skillsToLearn.length} learning goals`);
+
+    res.json({
+      success: true,
+      message: "Profile retrieved successfully",
+      data: { user: freshUser }
+    });
+
+  } catch (error) {
+    console.error('❌ Profile fetch error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch profile"
+    });
+  }
+});
+
 // Quiz generation endpoint - GET version for testing
 app.get('/api/quiz', protect, async (req, res) => {
   try {
@@ -865,6 +1170,101 @@ Requirements:
   }
 }
 
+// Quiz Result Storage - PHASE 4
+app.post('/api/quiz/result', protect, async (req, res) => {
+  try {
+    const { skillName, score, questions, level } = req.body;
+    const userId = req.user._id;
+
+    if (!skillName || typeof score !== 'number' || !questions) {
+      return res.status(400).json({
+        success: false,
+        message: "Skill name, score, and questions are required"
+      });
+    }
+
+    // Map score to level
+    let calculatedLevel = 'Beginner';
+    if (score >= 80) calculatedLevel = 'Expert';
+    else if (score >= 60) calculatedLevel = 'Advanced';
+    else if (score >= 40) calculatedLevel = 'Intermediate';
+
+    console.log(`💾 Storing quiz result for ${skillName} - Score: ${score}%, Level: ${calculatedLevel}`);
+
+    // Use upsert for retakes - one quiz per user-skill pair
+    const quizResult = await QuizResult.findOneAndUpdate(
+      { userId, skillName },
+      {
+        userId,
+        skillName,
+        score,
+        level: level || calculatedLevel,
+        questions,
+        completedAt: new Date()
+      },
+      { upsert: true, new: true }
+    );
+
+    // Update user's known skill verification status
+    await User.findOneAndUpdate(
+      { 
+        _id: userId,
+        'knownSkills.skillName': skillName
+      },
+      { 
+        $set: { 
+          'knownSkills.$.verificationStatus': score >= 60 ? 'Verified' : 'Failed',
+          'knownSkills.$.score': score,
+          'knownSkills.$.verifiedAt': new Date(),
+          'knownSkills.$.level': calculatedLevel
+        }
+      }
+    );
+
+    console.log(`✅ Quiz result stored and skill updated for ${skillName}`);
+
+    res.json({
+      success: true,
+      message: "Quiz result saved successfully",
+      data: { 
+        quizResult,
+        level: calculatedLevel,
+        passed: score >= 60
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Quiz result storage error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to save quiz result"
+    });
+  }
+});
+
+// Get quiz results for a user
+app.get('/api/quiz/results', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const results = await QuizResult.find({ userId }).sort({ completedAt: -1 });
+
+    console.log(`📊 Retrieved ${results.length} quiz results for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: "Quiz results retrieved successfully",
+      data: { results }
+    });
+
+  } catch (error) {
+    console.error('❌ Quiz results fetch error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch quiz results"
+    });
+  }
+});
+
 // Remove old static template function - NO FALLBACKS ALLOWED
 
 // Root route
@@ -877,7 +1277,7 @@ app.get("/", (req, res) => {
       version: "1.0.0",
       status: "running",
       database: dbStatus,
-      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile", "/api/users", "/api/users/:id", "/quiz/generate", "/api/quiz"]
+      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile", "/api/users", "/api/users/:id", "/api/user/profile", "/api/skills/known", "/api/skills/learn", "/quiz/generate", "/api/quiz"]
     }
   });
 });

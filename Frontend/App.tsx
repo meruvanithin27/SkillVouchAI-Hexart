@@ -95,7 +95,7 @@ function App() {
               name: freshUserData.name || freshUserData.email.split('@')[0],
               email: freshUserData.email,
               avatar: freshUserData.avatar || '',
-              skillsKnown: freshUserData.skillsKnown || [],
+              skillsKnown: freshUserData.knownSkills || [],
               skillsToLearn: freshUserData.skillsToLearn || [],
               bio: freshUserData.bio || '',
               rating: freshUserData.rating || 5,
@@ -107,7 +107,9 @@ function App() {
             // Update local state and storage with fresh data
             setUser(transformedUser);
             localStorage.setItem('authUser', JSON.stringify(transformedUser));
-            console.log('✅ User data synced with backend');
+            console.log('✅ User data synced with backend -', 
+                       transformedUser.knownSkills.length, 'known skills,', 
+                       transformedUser.skillsToLearn.length, 'learning goals');
             
           } catch (syncError) {
             console.warn('⚠️ Failed to sync with backend, using cached data:', syncError);

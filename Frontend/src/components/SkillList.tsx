@@ -47,53 +47,82 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
       // First update the local state for immediate UI feedback
       onUpdateUser(updatedUser);
       
-      // Then try to save to backend
+      // Then fetch fresh data from backend to ensure consistency
       try {
-        await dbService.saveUser(updatedUser);
-        console.log('✅ User successfully saved to database');
+        const freshUserData = await apiService.getProfile();
+        
+        // Transform backend user data to frontend format
+        const transformedUser = {
+          id: freshUserData._id,
+          name: freshUserData.name || freshUserData.email.split('@')[0],
+          email: freshUserData.email,
+          avatar: freshUserData.avatar || '',
+          skillsKnown: freshUserData.knownSkills || [],
+          skillsToLearn: freshUserData.skillsToLearn || [],
+          bio: freshUserData.bio || '',
+          rating: freshUserData.rating || 5,
+          languages: freshUserData.languages || [],
+          preferredLanguage: freshUserData.preferredLanguage || 'English',
+          availability: freshUserData.availability || []
+        };
+        
+        // Update state with fresh data from backend
+        onUpdateUser(transformedUser);
+        localStorage.setItem('authUser', JSON.stringify(transformedUser));
+        console.log('✅ User data synced with backend');
+        
       } catch (error) {
-        console.error('⚠️ Failed to save to database, but UI updated:', error);
-        // Don't revert the UI change - user can continue using the app
-        // The skill will be saved when they next login or when connectivity is restored
+        console.error('⚠️ Failed to sync with backend, using local state:', error);
+        // Continue with local state - better than breaking the UI
       }
   };
 
-  const handleAddSkill = () => {
+  const handleAddSkill = async () => {
     if (!newSkillName.trim()) return;
 
-    if (activeTab === 'known') {
-      const newSkill: Skill = {
-        id: Date.now().toString(),
-        name: newSkillName,
-        verified: false,
-        score: 0
-      };
-      updateUserAndDB({
-        ...user,
-        skillsKnown: [...user.skillsKnown, newSkill]
-      });
-    } else {
-      if (!user.skillsToLearn.includes(newSkillName)) {
-        updateUserAndDB({
-          ...user,
-          skillsToLearn: [...user.skillsToLearn, newSkillName]
-        });
+    try {
+      if (activeTab === 'known') {
+        console.log(`➕ Adding known skill: ${newSkillName}`);
+        const updatedUser = await apiService.addKnownSkill(newSkillName, 'Beginner');
+        onUpdateUser(updatedUser);
+        localStorage.setItem('authUser', JSON.stringify(updatedUser));
+        console.log('✅ Known skill added successfully');
+      } else {
+        console.log(`➕ Adding skill to learn: ${newSkillName}`);
+        const updatedUser = await apiService.addSkillToLearn(newSkillName, 'Medium');
+        onUpdateUser(updatedUser);
+        localStorage.setItem('authUser', JSON.stringify(updatedUser));
+        console.log('✅ Learning goal added successfully');
       }
+      setNewSkillName('');
+    } catch (error: any) {
+      console.error('❌ Failed to add skill:', error);
+      // Show error to user
+      alert(error.response?.data?.message || 'Failed to add skill. Please try again.');
     }
-    setNewSkillName('');
   };
 
-  const handleRemoveSkill = (id: string, isKnown: boolean) => {
-    if (isKnown) {
-      updateUserAndDB({
-        ...user,
-        skillsKnown: user.skillsKnown.filter(s => s.id !== id)
-      });
-    } else {
-      updateUserAndDB({
-        ...user,
-        skillsToLearn: user.skillsToLearn.filter(s => s !== id)
-      });
+  const handleRemoveSkill = async (id: string, isKnown: boolean) => {
+    try {
+      if (isKnown) {
+        const skill = user.skillsKnown.find(s => s.id === id);
+        if (skill) {
+          console.log(`➖ Removing known skill: ${skill.name}`);
+          const updatedUser = await apiService.removeKnownSkill(skill.name);
+          onUpdateUser(updatedUser);
+          localStorage.setItem('authUser', JSON.stringify(updatedUser));
+          console.log('✅ Known skill removed successfully');
+        }
+      } else {
+        console.log(`➖ Removing skill to learn: ${id}`);
+        const updatedUser = await apiService.removeSkillToLearn(id);
+        onUpdateUser(updatedUser);
+        localStorage.setItem('authUser', JSON.stringify(updatedUser));
+        console.log('✅ Learning goal removed successfully');
+      }
+    } catch (error: any) {
+      console.error('❌ Failed to remove skill:', error);
+      alert(error.response?.data?.message || 'Failed to remove skill. Please try again.');
     }
   };
 
@@ -101,25 +130,43 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
     setQuizSkill(skill.name);
   };
 
-  const handleCompleteQuiz = (score: number) => {
-    console.log('🎯 Updating skill verification with score:', score);
+  const handleCompleteQuiz = async (score: number, questions: any[] = []) => {
+    console.log('🎯 Completing quiz with score:', score);
     
-    const updatedSkills = user.skillsKnown.map(s =>
-      s.name.toLowerCase() === quizSkill?.toLowerCase()
-        ? { ...s, verified: true, score: score }
-        : s
-    );
-    const updatedUser = { ...user, skillsKnown: updatedSkills };
-    
-    // Update local state first
-    onUpdateUser(updatedUser);
-    
-    // Then save to backend
-    dbService.saveUser(updatedUser).catch(error => {
-      console.error('⚠️ Failed to save quiz results, but UI updated:', error);
-    });
-    
-    setQuizSkill(null);
+    try {
+      // Save quiz result to backend
+      const result = await apiService.saveQuizResult(quizSkill!, score, questions);
+      console.log('✅ Quiz result saved:', result);
+
+      // Fetch fresh user data to get updated verification status
+      const freshUserData = await apiService.getProfile();
+      
+      // Transform backend user data to frontend format
+      const transformedUser = {
+        id: freshUserData._id,
+        name: freshUserData.name || freshUserData.email.split('@')[0],
+        email: freshUserData.email,
+        avatar: freshUserData.avatar || '',
+        skillsKnown: freshUserData.knownSkills || [],
+        skillsToLearn: freshUserData.skillsToLearn || [],
+        bio: freshUserData.bio || '',
+        rating: freshUserData.rating || 5,
+        languages: freshUserData.languages || [],
+        preferredLanguage: freshUserData.preferredLanguage || 'English',
+        availability: freshUserData.availability || []
+      };
+      
+      // Update state with fresh data
+      onUpdateUser(transformedUser);
+      localStorage.setItem('authUser', JSON.stringify(transformedUser));
+      
+      setQuizSkill(null);
+      console.log('✅ Quiz completed and user data updated');
+      
+    } catch (error: any) {
+      console.error('❌ Failed to complete quiz:', error);
+      alert(error.response?.data?.message || 'Failed to save quiz results. Please try again.');
+    }
   };
 
   return (
