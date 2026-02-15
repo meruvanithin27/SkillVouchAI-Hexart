@@ -9,6 +9,8 @@
     "test": "node test-connection.js"
   },
   "dependencies": {
+    "@langchain/mistralai": "^0.0.25",
+    "@langchain/core": "^0.2.26",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
