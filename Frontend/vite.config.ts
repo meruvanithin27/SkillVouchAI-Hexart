@@ -25,23 +25,6 @@ export default defineConfig(({ mode }) => {
         cssCodeSplit: false,
         rollupOptions: {
           output: {
-            manualChunks: undefined,
-          }
-        }
-      },
-      plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
-      resolve: {
-        alias: {
-          '@': path.resolve(__dirname, 'src'),
-        }
-      },
-      build: {
-        rollupOptions: {
-          output: {
             manualChunks: {
               vendor: ['react', 'react-dom'],
               charts: ['recharts'],
@@ -53,6 +36,16 @@ export default defineConfig(({ mode }) => {
         minify: 'esbuild',
         sourcemap: false,
         target: 'esnext'
+      },
+      plugins: [react()],
+      define: {
+        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      },
+      resolve: {
+        alias: {
+          '@': path.resolve(__dirname, 'src'),
+        }
       },
       optimizeDeps: {
         include: ['react', 'react-dom', 'recharts', 'lucide-react'],
