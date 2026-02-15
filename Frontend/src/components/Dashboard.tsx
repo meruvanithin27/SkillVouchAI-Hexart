@@ -22,7 +22,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
   const verifiedSkills = (user.skillsKnown || []).filter(s => s.verified).length;
 
   // Profile Completion Logic
-  const missingBio = !user.bio || user.bio.length < 20;
+  const missingBio = !user.bio || (user.bio && user.bio.length < 20);
   const missingSkills = !user.skillsKnown || user.skillsKnown.length === 0;
   const missingGoals = !user.skillsToLearn || user.skillsToLearn.length === 0;
   const isProfileIncomplete = missingBio || missingSkills || missingGoals;
@@ -69,7 +69,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
              let score = 0;
              // Simple local heuristic
              // 1. Skill Match
-             const matchingSkills = (peer.skillsKnown || []).filter(s => (user.skillsToLearn || []).some(learnSkill => learnSkill.toLowerCase() === s.name.toLowerCase()));
+             const matchingSkills = (peer.skillsKnown || []).filter(s => (user.skillsToLearn || []).some(learnSkill => learnSkill.toLowerCase() === (s.name && s.name.toLowerCase())));
              if (matchingSkills.length > 0) {
                  score += 20; // Base score for a match
                  const hasVerifiedMatch = matchingSkills.some(s => s.verified);
@@ -80,7 +80,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
              
              // 2. Bio Keyword Match
              const myKeywords = (user.bio || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
-             const peerKeywords = (peer.bio || '').toLowerCase().split(/\s+/);
+             const peerKeywords = (peer.bio || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
              const common = myKeywords.filter(k => peerKeywords.includes(k));
              if (common.length > 0) score += 10;
              
