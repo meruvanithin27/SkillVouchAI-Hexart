@@ -57,6 +57,20 @@ console.log(`🔗 MongoDB URI: ${MONGO_URI ? 'Set' : 'Missing'}`);
 console.log(`🔐 JWT Secret: ${JWT_SECRET ? 'Set' : 'Missing'}`);
 console.log(`🚀 PORT: ${PORT}`);
 
+// Validate AI Configuration
+console.log('🤖 Validating AI Configuration...');
+const mistralApiKey = process.env.MISTRAL_API_KEY;
+if (!mistralApiKey) {
+  console.error('❌ MISTRAL_API_KEY not found in environment variables');
+  console.error('❌ AI features will be disabled');
+} else {
+  console.log('✅ MISTRAL_API_KEY: Configured');
+  console.log('✅ AI features: Enabled');
+}
+
+console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'Not configured'}`);
+console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+
 // Database connection state
 let dbConnectionState = {
   isConnected: false,
@@ -405,12 +419,12 @@ app.post("/api/auth/signup", async (req, res) => {
       });
     }
 
-    const { email, password } = req.body;
+    const { email, password, name } = req.body;
     
-    if (!email || !password) {
+    if (!email || !password || !name) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required"
+        message: "Email, password, and name are required"
       });
     }
     
@@ -423,7 +437,7 @@ app.post("/api/auth/signup", async (req, res) => {
     }
     
     const hashedPassword = await bcrypt.hash(password, 12);
-    const user = new User({ email, password: hashedPassword });
+    const user = new User({ email, password: hashedPassword, name });
     await user.save();
     
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
@@ -432,6 +446,7 @@ app.post("/api/auth/signup", async (req, res) => {
     const userResponse = {
       _id: user._id,
       email: user.email,
+      name: user.name,
       createdAt: user.createdAt
     };
     
@@ -1057,15 +1072,21 @@ app.post('/quiz/generate', protect, async (req, res) => {
 });
 
 // Dynamic AI Quiz Generation - 100% Skill-specific
-async function generateDynamicQuizQuestions(skill, difficulty) {
-  const maxRetries = 2;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+async function generateDynamicQuizQuestions(skill, difficulty = 'medium', questionCount = 5) {
+  // Validate AI Configuration
+  const mistralApiKey = process.env.MISTRAL_API_KEY;
+  if (!mistralApiKey) {
+    throw new Error("AI features are not available - MISTRAL_API_KEY not configured");
+  }
+
+  const maxRetries = 3;
+  let attempt = 0;
+  while (attempt <= maxRetries) {
     try {
       console.log(`🤖 AI Quiz Generation Attempt ${attempt}/${maxRetries} for ${skill}`);
       
       // Strict AI prompt for JSON-only output
-      const prompt = `Generate exactly 5 multiple-choice questions about ${skill} at ${difficulty} level.
+      const prompt = `Generate exactly ${questionCount} multiple-choice questions about ${skill} at ${difficulty} level.
 
 You MUST return ONLY valid JSON. Do NOT include explanations. Do NOT include markdown. Return exactly this structure:
 
@@ -1861,6 +1882,16 @@ app.get('/api/feedback/stats', protect, async (req, res) => {
 // AI Quiz Generation (Mistral)
 app.post('/api/mistral/generate-quiz', protect, async (req, res) => {
   try {
+    // Validate AI Configuration
+    const mistralApiKey = process.env.MISTRAL_API_KEY;
+    if (!mistralApiKey) {
+      console.log(`[AI] Quiz generation blocked - User: ${req.user._id} - MISTRAL_API_KEY not configured`);
+      return res.status(503).json({
+        success: false,
+        message: "AI features are not available - API key not configured"
+      });
+    }
+
     const { skill, difficulty, questionCount = 5 } = req.body;
     const userId = req.user._id;
     
