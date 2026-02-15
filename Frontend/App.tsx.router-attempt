@@ -1,0 +1,287 @@
+import React, { useState, useEffect, Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import axios from 'axios';
+
+// Import original components
+import { Logo } from './src/components/Logo';
+import { LandingPage } from './src/components/LandingPage';
+import { Dashboard } from './src/components/Dashboard';
+import { ChatBot } from './src/components/ChatBot';
+import { RoadmapView } from './src/components/RoadmapView';
+import { SkillList } from './src/components/SkillList';
+import { QuizModal } from './src/components/QuizModal';
+import { ProfileView } from './src/components/ProfileView';
+import { Layout } from './src/components/Layout';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
+
+// Import types
+import { User } from './src/types';
+
+// API Configuration - Preserve production fixes
+const API_URL = import.meta.env.VITE_API_URL || 'https://skillvouch-hexart-vv85.onrender.com';
+
+// Create centralized axios instance - Preserve production fixes
+const API = axios.create({
+  baseURL: API_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
+
+// Request interceptor - Preserve production fixes
+API.interceptors.request.use(config => {
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Response interceptor - Preserve production fixes
+API.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Loading fallback
+const LoadingSpinner = () => (
+  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+    <div className="text-center">
+      <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-white text-lg">Loading SkillVouch AI...</p>
+    </div>
+  </div>
+);
+
+// Authentication wrapper component
+const AuthWrapper = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Check for existing auth on mount
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    const userData = localStorage.getItem('authUser');
+    
+    if (token && userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (err) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('authUser');
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      setError('');
+      const response = await API.post('/api/auth/login', { email, password });
+      
+      if (response.data.success) {
+        const { token, user: userData } = response.data.data;
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('authUser', JSON.stringify(userData));
+        setUser(userData);
+        return true;
+      } else {
+        setError(response.data.message || 'Login failed');
+        return false;
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Network error');
+      return false;
+    }
+  };
+
+  const handleSignup = async (email: string, password: string) => {
+    try {
+      setError('');
+      const response = await API.post('/api/auth/signup', { email, password });
+      
+      if (response.data.success) {
+        const { token, user: userData } = response.data.data;
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('authUser', JSON.stringify(userData));
+        setUser(userData);
+        return true;
+      } else {
+        setError(response.data.message || 'Signup failed');
+        return false;
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Network error');
+      return false;
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('authUser');
+    setUser(null);
+  };
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  return React.cloneElement(children as React.ReactElement, {
+    user,
+    onLogin: handleLogin,
+    onSignup: handleSignup,
+    onLogout: handleLogout,
+    authError: error
+  });
+};
+
+// Protected route component
+const ProtectedRoute = ({ children, user }: { children: React.ReactNode; user: User | null }) => {
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+};
+
+// Main App Component
+function App() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <LoadingSpinner />;
+  }
+
+  return (
+    <ErrorBoundary>
+      <Router>
+        <div className="min-h-screen bg-slate-950 text-white">
+          <Routes>
+            {/* Landing/Login Page */}
+            <Route 
+              path="/" 
+              element={
+                <AuthWrapper>
+                  <LandingPage />
+                </AuthWrapper>
+              } 
+            />
+            
+            {/* Dashboard - Protected */}
+            <Route 
+              path="/dashboard" 
+              element={
+                <AuthWrapper>
+                  {({ user, onLogout }: any) => (
+                    <ProtectedRoute user={user}>
+                      <Layout user={user} onLogout={onLogout}>
+                        <Dashboard user={user} />
+                      </Layout>
+                    </ProtectedRoute>
+                  )}
+                </AuthWrapper>
+              } 
+            />
+            
+            {/* Profile - Protected */}
+            <Route 
+              path="/profile" 
+              element={
+                <AuthWrapper>
+                  {({ user, onLogout }: any) => (
+                    <ProtectedRoute user={user}>
+                      <Layout user={user} onLogout={onLogout}>
+                        <ProfileView user={user} />
+                      </Layout>
+                    </ProtectedRoute>
+                  )}
+                </AuthWrapper>
+              } 
+            />
+            
+            {/* Skills/Subjects - Protected */}
+            <Route 
+              path="/skills" 
+              element={
+                <AuthWrapper>
+                  {({ user, onLogout }: any) => (
+                    <ProtectedRoute user={user}>
+                      <Layout user={user} onLogout={onLogout}>
+                        <SkillList user={user} />
+                      </Layout>
+                    </ProtectedRoute>
+                  )}
+                </AuthWrapper>
+              } 
+            />
+            
+            {/* Quiz - Protected */}
+            <Route 
+              path="/quiz" 
+              element={
+                <AuthWrapper>
+                  {({ user, onLogout }: any) => (
+                    <ProtectedRoute user={user}>
+                      <Layout user={user} onLogout={onLogout}>
+                        <QuizModal user={user} />
+                      </Layout>
+                    </ProtectedRoute>
+                  )}
+                </AuthWrapper>
+              } 
+            />
+            
+            {/* Roadmap - Protected */}
+            <Route 
+              path="/roadmap" 
+              element={
+                <AuthWrapper>
+                  {({ user, onLogout }: any) => (
+                    <ProtectedRoute user={user}>
+                      <Layout user={user} onLogout={onLogout}>
+                        <RoadmapView user={user} />
+                      </Layout>
+                    </ProtectedRoute>
+                  )}
+                </AuthWrapper>
+              } 
+            />
+            
+            {/* Chatbot - Protected */}
+            <Route 
+              path="/chat" 
+              element={
+                <AuthWrapper>
+                  {({ user, onLogout }: any) => (
+                    <ProtectedRoute user={user}>
+                      <Layout user={user} onLogout={onLogout}>
+                        <ChatBot user={user} />
+                      </Layout>
+                    </ProtectedRoute>
+                  )}
+                </AuthWrapper>
+              } 
+            />
+            
+            {/* Fallback route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </Router>
+    </ErrorBoundary>
+  );
+}
+
+export default App;
