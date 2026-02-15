@@ -118,55 +118,11 @@ export const MatchFinder: React.FC<MatchFinderProps> = ({ currentUser, onMessage
         baseScore: calculateBaseScore(currentUser, user)
     })).sort((a, b) => b.baseScore - a.baseScore).slice(0, 6); // Take top 6 for deep analysis
 
-  // Enhanced base score calculation with keyword matching
-  const calculateBaseScore = (me: User, candidate: User): number => {
-      let score = 0;
+    const results: MatchRecommendation[] = [];
 
-      // 1. Skill Complementarity (Max 50 pts)
-      // Does candidate have skills I want?
-      const usefulSkills = candidate.skillsKnown.filter(s => me.skillsToLearn.some(
-          want => typeof want === 'string'
-            ? want.toLowerCase() === s.name.toLowerCase()
-            : (want.skillName || '').toLowerCase() === s.name.toLowerCase()
-      ));
-
-      if (usefulSkills.length > 0) {
-          score += 25; // Base match found
-
-          // Find the highest quality skill among the matching ones
-          const bestSkill = usefulSkills.reduce((prev, current) => (prev.score || 0) > (current.score || 0) ? prev : current);
-
-          // Verified Score Bonus
-          if (bestSkill.verified && bestSkill.score) {
-              // Map quiz score (0-100) to match points (0-25)
-              score += Math.round((bestSkill.score / 100) * 25);
-          } else if (bestSkill.verified) {
-               // Fallback if verified but no score (legacy data), assume passing grade
-               score += 15;
-          }
-      }
-
-      // 2. Reciprocity (Max 25 pts)
-      // Do I have skills candidate wants? (Mutual exchange is better)
-      const canITeach = me.skillsKnown.filter(s => candidate.skillsToLearn.some(
-          want => typeof want === 'string'
-            ? want.toLowerCase() === s.name.toLowerCase()
-            : (want.skillName || '').toLowerCase() === s.name.toLowerCase()
-      ));
-
-      if (canITeach.length > 0) {
-          score += 15;
-          // Bonus if *I* am verified in what I teach (High quality exchange)
-          if (canITeach.some(s => s.verified)) score += 10;
-      }
-
-      // 3. Keyword Matching (Max 25 pts for flexible mode)
-      const keywordScore = calculateKeywordScore(me, candidate, false); // Always use flexible for base score
-      score += keywordScore;
-
-      return Math.min(100, score);
-  };
-        
+    for (const item of scoredCandidates) {
+      try {
+        const analysis = await analyzeMatch(currentUser, item.user);
         // Weighted Average: 40% Base Heuristic + 60% AI Insight
         const finalScore = Math.round((item.baseScore * 0.4) + (analysis.score * 0.6));
 

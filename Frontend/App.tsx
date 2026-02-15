@@ -11,6 +11,7 @@ import { Dashboard } from './src/components/Dashboard';
 import { ChatBot } from './src/components/ChatBot';
 import { RoadmapView } from './src/components/RoadmapView';
 import { SkillList } from './src/components/SkillList';
+import { MatchFinder } from './src/components/MatchFinder';
 import { QuizModal } from './src/components/QuizModal';
 import { ProfileView } from './src/components/ProfileView';
 import { Layout } from './src/components/Layout';

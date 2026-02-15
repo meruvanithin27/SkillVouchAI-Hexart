@@ -55,7 +55,17 @@ export const apiService = {
     await delay(50); // Reduced from 300ms
     try {
       const response = await API.get('/api/users');
-      return response.data || [];
+      const data = response.data;
+      
+      // Ensure we return an array
+      if (Array.isArray(data)) {
+        return data;
+      } else if (data && Array.isArray(data.data)) {
+        return data.data;
+      } else {
+        console.warn('getUsers: Unexpected response format, returning empty array');
+        return [];
+      }
     } catch (error) {
       console.error('Failed to fetch users:', error);
       return [];
@@ -232,7 +242,17 @@ export const apiService = {
     await delay(50); // Reduced from 300ms
     try {
       const response = await API.get(`/api/requests?userId=${userId}`);
-      return response.data || [];
+      const data = response.data;
+      
+      // Ensure we return an array
+      if (Array.isArray(data)) {
+        return data;
+      } else if (data && Array.isArray(data.data)) {
+        return data.data;
+      } else {
+        console.warn('getRequestsForUser: Unexpected response format, returning empty array');
+        return [];
+      }
     } catch (error) {
       console.error('Failed to fetch requests for user:', error);
       return [];
