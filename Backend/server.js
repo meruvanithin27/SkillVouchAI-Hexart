@@ -14,7 +14,7 @@ app.use(express.json());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "https://skillvouch-hexart.vercel.app",
+  origin: "https://skillvouch-hexart.vercel.app",
   credentials: true
 }));
 

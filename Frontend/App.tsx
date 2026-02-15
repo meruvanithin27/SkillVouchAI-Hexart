@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Environment validation
 const API_URL = import.meta.env.VITE_API_URL;
-console.log("🔍 API URL:", API_URL);
+console.log("API URL:", API_URL);
 
 if (!API_URL) {
   console.error("❌ Backend URL missing - VITE_API_URL is not defined!");
@@ -15,6 +15,24 @@ const API = axios.create({
   withCredentials: true
 });
 
+// Add debug logging
+API.interceptors.request.use(config => {
+  console.log("REQUEST:", config.method?.toUpperCase(), config.url);
+  return config;
+});
+
+API.interceptors.response.use(
+  res => {
+    console.log("SUCCESS:", res.status, res.config.url);
+    return res;
+  },
+  err => {
+    console.error("ERROR:", err.message);
+    console.error("ERROR DETAILS:", err.response?.status, err.response?.data);
+    return Promise.reject(err);
+  }
+);
+
 function App() {
   const [apiStatus, setApiStatus] = useState('loading');
   const [apiError, setApiError] = useState('');
@@ -23,6 +41,7 @@ function App() {
 
   // Backend health check on load
   useEffect(() => {
+    console.log("🔍 Starting backend health check...");
     API.get("/api/health")
       .then(res => {
         console.log("Backend OK:", res.data);
@@ -126,9 +145,24 @@ function App() {
           borderRadius: '4px',
           color: '#721c24'
         }}>
-          <strong>Error:</strong> {apiError}
+          <strong>Network Error:</strong> {apiError}
         </div>
       )}
+
+      {/* Debug Info */}
+      <div style={{ 
+        maxWidth: '600px', 
+        margin: '20px auto', 
+        padding: '15px', 
+        backgroundColor: '#d1ecf1', 
+        border: '1px solid #bee5eb', 
+        borderRadius: '4px',
+        color: '#0c5460'
+      }}>
+        <strong>Debug Info:</strong>
+        <p>Check browser console for detailed request/response logs.</p>
+        <p>Network tab should show Status 200 for /api/health</p>
+      </div>
 
       {/* Auth Test Section */}
       <div style={{ 
@@ -141,6 +175,7 @@ function App() {
         <h3>Authentication Test</h3>
         <button 
           onClick={() => {
+            console.log("🔍 Testing signup...");
             API.post('/api/auth/signup', { email: 'test@example.com', password: 'password123' })
               .then(res => {
                 console.log('Signup successful:', res.data);
