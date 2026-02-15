@@ -60,55 +60,22 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// Enhanced Landing Page with Authentication
-const AuthenticatedLandingPage = () => {
-  const [currentView, setCurrentView] = useState<View>(View.LANDING);
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
+// Login Component
+const LoginPage = ({ onLoginSuccess, onBackToLanding }: { 
+  onLoginSuccess: (user: User) => void; 
+  onBackToLanding: () => void;
+}) => {
   const [formData, setFormData] = useState({ email: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  // Check for existing auth on mount
-  useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const userData = localStorage.getItem('authUser');
-    
-    if (token && userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        // Transform backend user to frontend User interface
-        const transformedUser: User = {
-          id: parsedUser._id,
-          name: parsedUser.email.split('@')[0], // Use email prefix as name
-          email: parsedUser.email,
-          avatar: '', // Default avatar
-          skillsKnown: [],
-          skillsToLearn: [],
-          bio: '',
-          rating: 5,
-          languages: [],
-          preferredLanguage: 'English',
-          availability: []
-        };
-        setUser(transformedUser);
-        setCurrentView(View.DASHBOARD);
-      } catch (err) {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('authUser');
-      }
-    }
-    setLoading(false);
-  }, []);
-
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
-      const response = await API.post(endpoint, formData);
+      const response = await API.post('/api/auth/login', formData);
       
       if (response.data.success) {
         const { token, user: backendUser } = response.data.data;
@@ -130,11 +97,9 @@ const AuthenticatedLandingPage = () => {
         
         localStorage.setItem('authToken', token);
         localStorage.setItem('authUser', JSON.stringify(transformedUser));
-        setUser(transformedUser);
-        setCurrentView(View.DASHBOARD);
-        setError('');
+        onLoginSuccess(transformedUser);
       } else {
-        setError(response.data.message || 'Authentication failed');
+        setError(response.data.message || 'Login failed');
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Network error');
@@ -143,23 +108,249 @@ const AuthenticatedLandingPage = () => {
     }
   };
 
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-lg p-8 max-w-md w-full">
+        <div className="text-center mb-8">
+          <Logo className="w-16 h-16 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
+          <p className="text-slate-400">Sign in to your SkillVouch account</p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="your@email.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={onBackToLanding}
+            className="text-indigo-400 hover:text-indigo-300 text-sm"
+          >
+            ← Back to Landing Page
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Signup Component
+const SignupPage = ({ onSignupSuccess, onBackToLanding }: { 
+  onSignupSuccess: (user: User) => void; 
+  onBackToLanding: () => void;
+}) => {
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await API.post('/api/auth/signup', formData);
+      
+      if (response.data.success) {
+        const { token, user: backendUser } = response.data.data;
+        
+        // Transform backend user to frontend User interface
+        const transformedUser: User = {
+          id: backendUser._id,
+          name: backendUser.email.split('@')[0],
+          email: backendUser.email,
+          avatar: '',
+          skillsKnown: [],
+          skillsToLearn: [],
+          bio: '',
+          rating: 5,
+          languages: [],
+          preferredLanguage: 'English',
+          availability: []
+        };
+        
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('authUser', JSON.stringify(transformedUser));
+        onSignupSuccess(transformedUser);
+      } else {
+        setError(response.data.message || 'Signup failed');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-lg p-8 max-w-md w-full">
+        <div className="text-center mb-8">
+          <Logo className="w-16 h-16 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-white mb-2">Join SkillVouch</h1>
+          <p className="text-slate-400">Create your free account</p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="your@email.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+          >
+            {loading ? 'Creating account...' : 'Sign Up'}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={onBackToLanding}
+            className="text-indigo-400 hover:text-indigo-300 text-sm"
+          >
+            ← Back to Landing Page
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Main App Component
+function App() {
+  const [currentView, setCurrentView] = useState<View>(View.LANDING);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  // Check for existing auth on mount
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    const userData = localStorage.getItem('authUser');
+    
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setCurrentView(View.DASHBOARD);
+      } catch (err) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('authUser');
+      }
+    }
+    setLoading(false);
+    setMounted(true);
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
     setUser(null);
     setCurrentView(View.LANDING);
-    setFormData({ email: '', password: '' });
   };
 
+  const handleLoginSuccess = (loggedInUser: User) => {
+    setUser(loggedInUser);
+    setCurrentView(View.DASHBOARD);
+  };
+
+  const handleSignupSuccess = (signedUpUser: User) => {
+    setUser(signedUpUser);
+    setCurrentView(View.DASHBOARD);
+  };
+
+  const handleNavigate = (view: View) => {
+    setCurrentView(view);
+  };
+
+  if (!mounted || loading) {
+    return <LoadingSpinner />;
+  }
+
+  // Render based on current view and auth state
   const renderCurrentView = () => {
-    // If user is logged in, show the appropriate view
+    // If user is logged in, show dashboard with layout
     if (user) {
       switch (currentView) {
         case View.DASHBOARD:
           return (
             <Layout 
               currentView={currentView} 
-              onNavigate={setCurrentView} 
+              onNavigate={handleNavigate} 
               user={user} 
               onLogout={handleLogout}
             >
@@ -170,7 +361,7 @@ const AuthenticatedLandingPage = () => {
           return (
             <Layout 
               currentView={currentView} 
-              onNavigate={setCurrentView} 
+              onNavigate={handleNavigate} 
               user={user} 
               onLogout={handleLogout}
             >
@@ -181,7 +372,7 @@ const AuthenticatedLandingPage = () => {
           return (
             <Layout 
               currentView={currentView} 
-              onNavigate={setCurrentView} 
+              onNavigate={handleNavigate} 
               user={user} 
               onLogout={handleLogout}
             >
@@ -192,7 +383,7 @@ const AuthenticatedLandingPage = () => {
           return (
             <Layout 
               currentView={currentView} 
-              onNavigate={setCurrentView} 
+              onNavigate={handleNavigate} 
               user={user} 
               onLogout={handleLogout}
             >
@@ -203,7 +394,7 @@ const AuthenticatedLandingPage = () => {
           return (
             <Layout 
               currentView={currentView} 
-              onNavigate={setCurrentView} 
+              onNavigate={handleNavigate} 
               user={user} 
               onLogout={handleLogout}
             >
@@ -213,173 +404,34 @@ const AuthenticatedLandingPage = () => {
       }
     }
 
-    // If not logged in, show landing page with auth
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
-        {/* Navigation */}
-        <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/80 backdrop-blur-md">
-          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-            <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setCurrentView(View.LANDING)}>
-              <Logo className="w-10 h-10 shadow-lg" />
-              <span className="text-xl font-bold tracking-tight text-white">SkillVouch AI</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button 
-                onClick={() => setIsLogin(true)}
-                className="text-slate-300 hover:text-white font-medium transition-colors px-4 py-2"
-              >
-                Login
-              </button>
-              <button 
-                onClick={() => setIsLogin(false)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full font-medium transition-all transform hover:scale-105 shadow-lg shadow-indigo-500/25"
-              >
-                Sign Up
-              </button>
-            </div>
-          </div>
-        </nav>
-
-        {/* Hero Section with Auth Form */}
-        <section className="relative pt-32 pb-20 md:pt-48 md:pb-32">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full max-w-7xl pointer-events-none">
-            <div className="absolute top-20 left-10 w-72 h-72 md:w-96 md:h-96 bg-purple-500/20 rounded-full blur-[100px] animate-pulse"></div>
-            <div className="absolute bottom-20 right-10 w-72 h-72 md:w-96 md:h-96 bg-indigo-500/20 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '1s' }}></div>
-          </div>
-
-          <div className="max-w-7xl mx-auto px-6 relative z-10">
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              {/* Left Column - Hero Content */}
-              <div className="text-center md:text-left">
-                <div className="inline-flex items-center space-x-2 bg-slate-900/50 border border-slate-700/50 rounded-full px-4 py-1.5 mb-8">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-emerald-400 text-sm font-medium">Skill Exchange Platform</span>
-                </div>
-                
-                <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-                  Connect, Learn & 
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400"> Grow Together</span>
-                </h1>
-                
-                <p className="text-xl text-slate-300 mb-8 leading-relaxed">
-                  Join our AI-powered skill exchange community. Share your expertise, learn from others, and build meaningful connections.
-                </p>
-                
-                <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                  <button 
-                    onClick={() => setIsLogin(false)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-full font-semibold transition-all transform hover:scale-105 shadow-lg shadow-indigo-500/25 flex items-center justify-center space-x-2"
-                  >
-                    <span>Get Started</span>
-                    <span>→</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Right Column - Auth Form */}
-              <div className="max-w-md mx-auto md:mx-0">
-                <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8 shadow-2xl">
-                  <div className="text-center mb-8">
-                    <h2 className="text-2xl font-bold text-white mb-2">
-                      {isLogin ? 'Welcome Back' : 'Join SkillVouch'}
-                    </h2>
-                    <p className="text-slate-400">
-                      {isLogin ? 'Sign in to your account' : 'Create your free account'}
-                    </p>
-                  </div>
-
-                  {error && (
-                    <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
-                      <p className="text-red-400 text-sm">{error}</p>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleAuth} className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                        placeholder="your@email.com"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">
-                        Password
-                      </label>
-                      <input
-                        type="password"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                        placeholder="••••••••"
-                        required
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-all transform hover:scale-[1.02] disabled:scale-100 shadow-lg"
-                    >
-                      {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
-                    </button>
-                  </form>
-
-                  <div className="mt-6 text-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsLogin(!isLogin);
-                        setError('');
-                      }}
-                      className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors"
-                    >
-                      {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-    );
+    // If not logged in, show appropriate view
+    switch (currentView) {
+      case View.LANDING:
+        return <LandingPage onNavigate={handleNavigate} />;
+      case View.LOGIN:
+        return (
+          <LoginPage 
+            onLoginSuccess={handleLoginSuccess}
+            onBackToLanding={() => setCurrentView(View.LANDING)}
+          />
+        );
+      case View.SIGNUP:
+        return (
+          <SignupPage 
+            onSignupSuccess={handleSignupSuccess}
+            onBackToLanding={() => setCurrentView(View.LANDING)}
+          />
+        );
+      default:
+        return <LandingPage onNavigate={handleNavigate} />;
+    }
   };
-
-  if (loading) {
-    return <LoadingSpinner />;
-  }
 
   return (
     <ErrorBoundary>
       {renderCurrentView()}
     </ErrorBoundary>
   );
-};
-
-// Main App Component
-function App() {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return <LoadingSpinner />;
-  }
-
-  return <AuthenticatedLandingPage />;
 }
 
 export default App;
