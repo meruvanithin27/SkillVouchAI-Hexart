@@ -52,24 +52,9 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
       try {
         const freshUserData = await apiService.getProfile();
         
-        // Transform backend user data to frontend format
-        const transformedUser = {
-          id: freshUserData._id,
-          name: freshUserData.name || (freshUserData.email || '').split('@')[0],
-          email: freshUserData.email,
-          avatar: freshUserData.avatar || '',
-          skillsKnown: freshUserData.knownSkills || [],
-          skillsToLearn: freshUserData.skillsToLearn || [],
-          bio: freshUserData.bio || '',
-          rating: freshUserData.rating || 5,
-          languages: freshUserData.languages || [],
-          preferredLanguage: freshUserData.preferredLanguage || 'English',
-          availability: freshUserData.availability || []
-        };
-        
-        // Update state with fresh data from backend
-        onUpdateUser(transformedUser);
-        localStorage.setItem('authUser', JSON.stringify(transformedUser));
+        // Update local state and storage with fresh data
+        onUpdateUser(freshUserData);
+        localStorage.setItem('authUser', JSON.stringify(freshUserData));
         console.log('✅ User data synced with backend');
         
       } catch (error) {
@@ -142,24 +127,9 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
       // Fetch fresh user data to get updated verification status
       const freshUserData = await apiService.getProfile();
       
-      // Transform backend user data to frontend format
-      const transformedUser = {
-        id: freshUserData._id,
-        name: freshUserData.name || (freshUserData.email || '').split('@')[0],
-        email: freshUserData.email,
-        avatar: freshUserData.avatar || '',
-        skillsKnown: freshUserData.knownSkills || [],
-        skillsToLearn: freshUserData.skillsToLearn || [],
-        bio: freshUserData.bio || '',
-        rating: freshUserData.rating || 5,
-        languages: freshUserData.languages || [],
-        preferredLanguage: freshUserData.preferredLanguage || 'English',
-        availability: freshUserData.availability || []
-      };
-      
       // Update state with fresh data
-      onUpdateUser(transformedUser);
-      localStorage.setItem('authUser', JSON.stringify(transformedUser));
+      onUpdateUser(freshUserData);
+      localStorage.setItem('authUser', JSON.stringify(freshUserData));
       
       setQuizSkill(null);
       console.log('✅ Quiz completed and user data updated');

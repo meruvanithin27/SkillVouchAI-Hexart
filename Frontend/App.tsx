@@ -196,6 +196,28 @@ function App() {
               <RoadmapView user={user} />
             </Layout>
           );
+        case View.MESSAGES:
+          return (
+            <Layout 
+              currentView={currentView} 
+              onNavigate={handleNavigate} 
+              user={user} 
+              onLogout={handleLogout}
+            >
+              <ChatView user={user} />
+            </Layout>
+          );
+        case View.FIND_PEERS:
+          return (
+            <Layout 
+              currentView={currentView} 
+              onNavigate={handleNavigate} 
+              user={user} 
+              onLogout={handleLogout}
+            >
+              <MatchFinder user={user} />
+            </Layout>
+          );
         default:
           return (
             <Layout 
