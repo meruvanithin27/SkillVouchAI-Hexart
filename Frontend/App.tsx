@@ -157,31 +157,56 @@ const AuthenticatedLandingPage = () => {
       switch (currentView) {
         case View.DASHBOARD:
           return (
-            <Layout user={user} onLogout={handleLogout}>
+            <Layout 
+              currentView={currentView} 
+              onNavigate={setCurrentView} 
+              user={user} 
+              onLogout={handleLogout}
+            >
               <Dashboard user={user} />
             </Layout>
           );
         case View.PROFILE:
           return (
-            <Layout user={user} onLogout={handleLogout}>
+            <Layout 
+              currentView={currentView} 
+              onNavigate={setCurrentView} 
+              user={user} 
+              onLogout={handleLogout}
+            >
               <ProfileView user={user} />
             </Layout>
           );
         case View.MY_SKILLS:
           return (
-            <Layout user={user} onLogout={handleLogout}>
+            <Layout 
+              currentView={currentView} 
+              onNavigate={setCurrentView} 
+              user={user} 
+              onLogout={handleLogout}
+            >
               <SkillList user={user} />
             </Layout>
           );
         case View.ROADMAP:
           return (
-            <Layout user={user} onLogout={handleLogout}>
+            <Layout 
+              currentView={currentView} 
+              onNavigate={setCurrentView} 
+              user={user} 
+              onLogout={handleLogout}
+            >
               <RoadmapView user={user} />
             </Layout>
           );
         default:
           return (
-            <Layout user={user} onLogout={handleLogout}>
+            <Layout 
+              currentView={currentView} 
+              onNavigate={setCurrentView} 
+              user={user} 
+              onLogout={handleLogout}
+            >
               <Dashboard user={user} />
             </Layout>
           );
