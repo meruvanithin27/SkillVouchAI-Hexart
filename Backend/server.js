@@ -451,6 +451,138 @@ app.get("/api/auth/profile", protect, async (req, res) => {
   }
 });
 
+// Users list endpoint
+app.get('/api/users', protect, async (req, res) => {
+  try {
+    const dbStatus = getDatabaseStatus();
+    if (dbStatus !== 'connected') {
+      return res.status(503).json({
+        success: false,
+        message: "Database is not connected. Please try again later."
+      });
+    }
+
+    const users = await User.find({}).select('-password');
+    
+    res.json({
+      success: true,
+      message: "Users retrieved successfully",
+      data: users
+    });
+  } catch (error) {
+    console.error('GET /api/users error', error);
+    if (error.name === 'MongoTimeoutError' || error.name === 'MongoNetworkError') {
+      return res.status(503).json({
+        success: false,
+        message: "Database connection error. Please try again."
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
+
+// User update endpoint
+app.put('/api/users/:id', protect, async (req, res) => {
+  try {
+    const dbStatus = getDatabaseStatus();
+    if (dbStatus !== 'connected') {
+      return res.status(503).json({
+        success: false,
+        message: "Database is not connected. Please try again later."
+      });
+    }
+
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Only allow users to update their own profile
+    if (req.user._id.toString() !== id) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only update your own profile"
+      });
+    }
+
+    // Update user in database
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    console.log(`✅ User ${id} updated successfully`);
+
+    res.json({
+      success: true,
+      message: "User updated successfully",
+      data: { user: updatedUser }
+    });
+  } catch (error) {
+    console.error('PUT /api/users/:id error', error);
+    if (error.name === 'MongoTimeoutError' || error.name === 'MongoNetworkError') {
+      return res.status(503).json({
+        success: false,
+        message: "Database connection error. Please try again."
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
+
+// User get endpoint
+app.get('/api/users/:id', protect, async (req, res) => {
+  try {
+    const dbStatus = getDatabaseStatus();
+    if (dbStatus !== 'connected') {
+      return res.status(503).json({
+        success: false,
+        message: "Database is not connected. Please try again later."
+      });
+    }
+
+    const { id } = req.params;
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "User retrieved successfully",
+      data: { user }
+    });
+  } catch (error) {
+    console.error('GET /api/users/:id error', error);
+    if (error.name === 'MongoTimeoutError' || error.name === 'MongoNetworkError') {
+      return res.status(503).json({
+        success: false,
+        message: "Database connection error. Please try again."
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
+
 // Root route
 app.get("/", (req, res) => {
   const dbStatus = getDatabaseStatus();
@@ -461,7 +593,7 @@ app.get("/", (req, res) => {
       version: "1.0.0",
       status: "running",
       database: dbStatus,
-      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile"]
+      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile", "/api/users", "/api/users/:id"]
     }
   });
 });

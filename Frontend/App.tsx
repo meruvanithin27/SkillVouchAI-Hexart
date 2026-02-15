@@ -131,7 +131,11 @@ function App() {
               user={user} 
               onLogout={handleLogout}
             >
-              <Dashboard user={user} />
+              <Dashboard 
+                user={user} 
+                onNavigateToProfile={() => handleNavigate(View.PROFILE)} 
+                onNavigate={handleNavigate} 
+              />
             </Layout>
           );
         case View.PROFILE:
@@ -153,7 +157,7 @@ function App() {
               user={user} 
               onLogout={handleLogout}
             >
-              <SkillList user={user} />
+              <SkillList user={user} onUpdateUser={setUser} />
             </Layout>
           );
         case View.ROADMAP:
