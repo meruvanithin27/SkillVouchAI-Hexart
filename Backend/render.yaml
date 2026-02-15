@@ -17,5 +17,7 @@ services:
         sync: false
       - key: MISTRAL_API_KEY
         sync: false
-    healthCheckPath: /api
+      - key: FRONTEND_URL
+        sync: false
+    healthCheckPath: /api/health
     autoDeploy: true
