@@ -1,0 +1,293 @@
+import React, { useState } from 'react';
+import { Mail, Lock, ArrowLeft, Eye, EyeOff, User, CheckCircle } from 'lucide-react';
+import { Logo } from './Logo';
+import axios from 'axios';
+
+interface SignupPageProps {
+  onSignupSuccess: (user: any) => void;
+  onBackToLanding: () => void;
+}
+
+const API_URL = import.meta.env.VITE_API_URL || 'https://skillvouch-hexart-vv85.onrender.com';
+const API = axios.create({
+  baseURL: API_URL,
+  timeout: 10000,
+  headers: { 'Content-Type': 'application/json' }
+});
+
+API.interceptors.request.use(config => {
+  const token = localStorage.getItem('authToken');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess, onBackToLanding }) => {
+  const [formData, setFormData] = useState({ email: '', password: '', confirmPassword: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const validateForm = () => {
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return false;
+    }
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!validateForm()) return;
+
+    setLoading(true);
+
+    try {
+      const response = await API.post('/api/auth/signup', { 
+        email: formData.email, 
+        password: formData.password 
+      });
+      
+      if (response.data.success) {
+        const { token, user: backendUser } = response.data.data;
+        
+        const transformedUser = {
+          id: backendUser._id,
+          name: backendUser.email.split('@')[0],
+          email: backendUser.email,
+          avatar: '',
+          skillsKnown: [],
+          skillsToLearn: [],
+          bio: '',
+          rating: 5,
+          languages: [],
+          preferredLanguage: 'English',
+          availability: []
+        };
+        
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('authUser', JSON.stringify(transformedUser));
+        onSignupSuccess(transformedUser);
+      } else {
+        setError(response.data.message || 'Signup failed');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getPasswordStrength = (password: string) => {
+    if (password.length < 6) return { color: 'text-red-400', text: 'Weak' };
+    if (password.length < 10) return { color: 'text-yellow-400', text: 'Medium' };
+    return { color: 'text-emerald-400', text: 'Strong' };
+  };
+
+  const passwordStrength = getPasswordStrength(formData.password);
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans overflow-x-hidden">
+      {/* Background Gradients */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-20 left-10 w-72 h-72 md:w-96 md:h-96 bg-purple-500/20 rounded-full blur-[100px] animate-pulse"></div>
+        <div className="absolute bottom-20 right-10 w-72 h-72 md:w-96 md:h-96 bg-indigo-500/20 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/80 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={onBackToLanding}>
+            <Logo className="w-10 h-10 shadow-lg" />
+            <span className="text-xl font-bold tracking-tight text-white">SkillVouch AI</span>
+          </div>
+          <button 
+            onClick={onBackToLanding}
+            className="flex items-center space-x-2 text-slate-300 hover:text-white font-medium transition-colors px-4 py-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* Signup Form Section */}
+      <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 min-h-screen flex items-center">
+        <div className="max-w-md mx-auto w-full px-6 relative z-10">
+          <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8 shadow-2xl">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-500/10 rounded-full mb-4">
+                <User className="w-8 h-8 text-emerald-400" />
+              </div>
+              <h1 className="text-3xl font-bold text-white mb-2">Join SkillVouch</h1>
+              <p className="text-slate-400">Create your free account and start learning</p>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
+                <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+
+            {/* Signup Form */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Email Field */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    placeholder="your@email.com"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Password Field */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full pl-10 pr-12 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    placeholder="Create a strong password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                {formData.password && (
+                  <div className="mt-2 flex items-center space-x-2">
+                    <div className={`text-xs ${passwordStrength.color}`}>
+                      Password strength: {passwordStrength.text}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Confirm Password Field */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    className="w-full pl-10 pr-12 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    placeholder="Confirm your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                {formData.confirmPassword && formData.password === formData.confirmPassword && (
+                  <div className="mt-2 flex items-center space-x-1 text-emerald-400">
+                    <CheckCircle className="w-3 h-3" />
+                    <span className="text-xs">Passwords match</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Terms */}
+              <div className="text-xs text-slate-400">
+                By creating an account, you agree to our{' '}
+                <a href="#" className="text-indigo-400 hover:text-indigo-300 transition-colors">
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a href="#" className="text-indigo-400 hover:text-indigo-300 transition-colors">
+                  Privacy Policy
+                </a>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-all transform hover:scale-[1.02] disabled:scale-100 shadow-lg"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Creating account...</span>
+                  </div>
+                ) : (
+                  'Create Account'
+                )}
+              </button>
+            </form>
+
+            {/* Footer Links */}
+            <div className="mt-6 text-center space-y-4">
+              <div className="text-sm text-slate-400">
+                Already have an account?{' '}
+                <button 
+                  onClick={onBackToLanding}
+                  className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+                >
+                  Sign in
+                </button>
+              </div>
+              
+              <button
+                type="button"
+                onClick={onBackToLanding}
+                className="text-xs text-slate-500 hover:text-slate-400 transition-colors"
+              >
+                ← Back to landing page
+              </button>
+            </div>
+          </div>
+
+          {/* Features Highlight */}
+          <div className="mt-8 grid grid-cols-3 gap-4 text-center">
+            <div className="bg-slate-900/30 border border-slate-700/30 rounded-lg p-3">
+              <div className="text-emerald-400 text-lg mb-1">🔒</div>
+              <div className="text-xs text-slate-400">Secure</div>
+            </div>
+            <div className="bg-slate-900/30 border border-slate-700/30 rounded-lg p-3">
+              <div className="text-indigo-400 text-lg mb-1">🤖</div>
+              <div className="text-xs text-slate-400">AI-Powered</div>
+            </div>
+            <div className="bg-slate-900/30 border border-slate-700/30 rounded-lg p-3">
+              <div className="text-purple-400 text-lg mb-1">🚀</div>
+              <div className="text-xs text-slate-400">Fast Setup</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};

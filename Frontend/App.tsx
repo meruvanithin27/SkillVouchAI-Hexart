@@ -4,6 +4,8 @@ import axios from 'axios';
 // Import original components
 import { Logo } from './src/components/Logo';
 import { LandingPage } from './src/components/LandingPage';
+import { LoginPage } from './src/components/LoginPage';
+import { SignupPage } from './src/components/SignupPage';
 import { Dashboard } from './src/components/Dashboard';
 import { ChatBot } from './src/components/ChatBot';
 import { RoadmapView } from './src/components/RoadmapView';
@@ -60,236 +62,6 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// Login Component
-const LoginPage = ({ onLoginSuccess, onBackToLanding }: { 
-  onLoginSuccess: (user: User) => void; 
-  onBackToLanding: () => void;
-}) => {
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const response = await API.post('/api/auth/login', formData);
-      
-      if (response.data.success) {
-        const { token, user: backendUser } = response.data.data;
-        
-        // Transform backend user to frontend User interface
-        const transformedUser: User = {
-          id: backendUser._id,
-          name: backendUser.email.split('@')[0],
-          email: backendUser.email,
-          avatar: '',
-          skillsKnown: [],
-          skillsToLearn: [],
-          bio: '',
-          rating: 5,
-          languages: [],
-          preferredLanguage: 'English',
-          availability: []
-        };
-        
-        localStorage.setItem('authToken', token);
-        localStorage.setItem('authUser', JSON.stringify(transformedUser));
-        onLoginSuccess(transformedUser);
-      } else {
-        setError(response.data.message || 'Login failed');
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Network error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-lg p-8 max-w-md w-full">
-        <div className="text-center mb-8">
-          <Logo className="w-16 h-16 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
-          <p className="text-slate-400">Sign in to your SkillVouch account</p>
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="your@email.com"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Password
-            </label>
-            <input
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <button
-            type="button"
-            onClick={onBackToLanding}
-            className="text-indigo-400 hover:text-indigo-300 text-sm"
-          >
-            ← Back to Landing Page
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Signup Component
-const SignupPage = ({ onSignupSuccess, onBackToLanding }: { 
-  onSignupSuccess: (user: User) => void; 
-  onBackToLanding: () => void;
-}) => {
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const response = await API.post('/api/auth/signup', formData);
-      
-      if (response.data.success) {
-        const { token, user: backendUser } = response.data.data;
-        
-        // Transform backend user to frontend User interface
-        const transformedUser: User = {
-          id: backendUser._id,
-          name: backendUser.email.split('@')[0],
-          email: backendUser.email,
-          avatar: '',
-          skillsKnown: [],
-          skillsToLearn: [],
-          bio: '',
-          rating: 5,
-          languages: [],
-          preferredLanguage: 'English',
-          availability: []
-        };
-        
-        localStorage.setItem('authToken', token);
-        localStorage.setItem('authUser', JSON.stringify(transformedUser));
-        onSignupSuccess(transformedUser);
-      } else {
-        setError(response.data.message || 'Signup failed');
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Network error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-lg p-8 max-w-md w-full">
-        <div className="text-center mb-8">
-          <Logo className="w-16 h-16 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-white mb-2">Join SkillVouch</h1>
-          <p className="text-slate-400">Create your free account</p>
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="your@email.com"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Password
-            </label>
-            <input
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-          >
-            {loading ? 'Creating account...' : 'Sign Up'}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <button
-            type="button"
-            onClick={onBackToLanding}
-            className="text-indigo-400 hover:text-indigo-300 text-sm"
-          >
-            ← Back to Landing Page
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // Main App Component
 function App() {
   const [currentView, setCurrentView] = useState<View>(View.LANDING);
@@ -335,6 +107,10 @@ function App() {
 
   const handleNavigate = (view: View) => {
     setCurrentView(view);
+  };
+
+  const handleBackToLanding = () => {
+    setCurrentView(View.LANDING);
   };
 
   if (!mounted || loading) {
@@ -412,14 +188,14 @@ function App() {
         return (
           <LoginPage 
             onLoginSuccess={handleLoginSuccess}
-            onBackToLanding={() => setCurrentView(View.LANDING)}
+            onBackToLanding={handleBackToLanding}
           />
         );
       case View.SIGNUP:
         return (
           <SignupPage 
             onSignupSuccess={handleSignupSuccess}
-            onBackToLanding={() => setCurrentView(View.LANDING)}
+            onBackToLanding={handleBackToLanding}
           />
         );
       default:
