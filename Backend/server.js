@@ -9,7 +9,7 @@ const app = express();
 // Basic middleware
 app.use(express.json());
 app.use(cors({
-  origin: ["https://skillvouch-hexart.vercel.app", "http://localhost:3000", "http://localhost:5173"],
+  origin: ["https://skillvouch-hexart.vercel.app", "https://skillvouch-hexart2026.vercel.app", "http://localhost:3000", "http://localhost:5173"],
   credentials: true
 }));
 
