@@ -1,0 +1,278 @@
+import { User, ExchangeRequest, Message, ExchangeFeedback } from '../types';
+import { suggestSkillsDirect, generateRoadmapDirect } from './mistralDirectService';
+import API from './axiosService';
+
+// Helper to simulate delay for "real" feel (reduced for better performance)
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Safe UUID generator that works even if crypto.randomUUID is not available
+const generateId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {
+    return (crypto as any).randomUUID();
+  }
+
+  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
+    const bytes = new Uint8Array(16);
+    (crypto as any).getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0'));
+    return `${hex.slice(0,4).join('')}-${hex.slice(4,6).join('')}-${hex.slice(6,8).join('')}-${hex.slice(8,10).join('')}-${hex.slice(10,16).join('')}`;
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+// Session storage for current user
+const SESSION_KEY = 'skillvouch_session';
+
+export const apiService = {
+
+  // --- SESSION ---
+  getCurrentSession: (): User | null => {
+    try {
+      const stored = localStorage.getItem(SESSION_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  },
+
+  setSession: (user: User) => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  },
+
+  logout: async () => {
+    await delay(50); // Reduced from 300ms
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem('authToken');
+  },
+
+  // --- USER MGMT ---
+  getUsers: async (): Promise<User[]> => {
+    await delay(50); // Reduced from 300ms
+    const response = await API.get('/users');
+    return response.data;
+  },
+
+  getUserById: async (id: string): Promise<User | undefined> => {
+    try {
+      const response = await API.get(`/users/${id}`);
+      return response.data;
+    } catch {
+      return undefined;
+    }
+  },
+
+  saveUser: async (user: User) => {
+    // No delay for save operations to make them feel instant
+    const response = await API.put(`/users/${user.id}`, user);
+    
+    // Update session if it's the current user
+    const session = apiService.getCurrentSession();
+    if (session && session.id === user.id) {
+      apiService.setSession(user);
+    }
+  },
+
+  // --- AUTH ---
+  login: async (email: string, password: string): Promise<User> => {
+    console.log('🔐 Frontend login attempt for:', email);
+    
+    try {
+      const response = await API.post('/api/auth/login', { 
+        email: email.trim(), 
+        password 
+      });
+      
+      const { user, token } = response.data;
+      
+      // Store token
+      localStorage.setItem('authToken', token);
+      apiService.setSession(user);
+      
+      console.log('✅ Frontend login successful for:', email);
+      return user;
+      
+    } catch (error: any) {
+      console.error('❌ Frontend login error:', error);
+      const message = error.response?.data?.message || 'Login failed';
+      throw new Error(message);
+    }
+  },
+
+  signup: async (name: string, email: string, password: string): Promise<User> => {
+    console.log('🚀 Frontend signup attempt for:', email);
+    
+    try {
+      const response = await API.post('/api/auth/signup', {
+        name: name.trim(),
+        email: email.trim(),
+        password
+      });
+      
+      const { user, token } = response.data;
+      
+      // Store token
+      localStorage.setItem('authToken', token);
+      
+      console.log('✅ Frontend signup successful for:', email);
+      return user;
+      
+    } catch (error: any) {
+      console.error('❌ Frontend signup error:', error);
+      const message = error.response?.data?.message || 'Signup failed';
+      throw new Error(message);
+    }
+  },
+
+  googleLogin: async (): Promise<User> => {
+    await delay(800);
+    // Simulate Google Login
+    const mockUser: User = {
+        id: 'google_' + Date.now(),
+        name: 'Google User',
+        email: `google_${Date.now()}@example.com`,
+        password: '',
+        avatar: `https://ui-avatars.com/api/?background=random&name=Google+User`,
+        bio: 'Signed in via Google',
+        skillsKnown: [],
+        skillsToLearn: [],
+        rating: 5
+    };
+    await apiService.saveUser(mockUser);
+    return mockUser;
+  },
+
+  // --- REQUESTS ---
+  createExchangeRequest: async (request: ExchangeRequest) => {
+    await delay(50); // Reduced from 300ms
+    const response = await API.post('/requests', request);
+    return response.data;
+  },
+
+  getRequestsForUser: async (userId: string): Promise<ExchangeRequest[]> => {
+    await delay(50); // Reduced from 300ms
+    const response = await API.get(`/requests?userId=${userId}`);
+    return response.data;
+  },
+
+  updateExchangeRequestStatus: async (id: string, status: ExchangeRequest['status']): Promise<{ success: true; status: ExchangeRequest['status']; completedAt?: number; }> => {
+    const response = await API.put(`/requests/${id}/status`, { status });
+    return response.data;
+  },
+
+  // --- FEEDBACK ---
+  submitExchangeFeedback: async (feedback: Omit<ExchangeFeedback, 'id' | 'createdAt'> & Partial<Pick<ExchangeFeedback, 'id' | 'createdAt'>>): Promise<ExchangeFeedback> => {
+    const response = await API.post('/feedback', feedback);
+    return response.data;
+  },
+
+  getReceivedFeedback: async (userId: string): Promise<ExchangeFeedback[]> => {
+    const response = await API.get(`/feedback/received?userId=${userId}`);
+    return response.data;
+  },
+
+  getFeedbackStats: async (userId: string): Promise<{ avgStars: number; count: number }> => {
+    const response = await API.get(`/feedback/stats?userId=${userId}`);
+    return response.data;
+  },
+
+  // --- MESSAGING ---
+  sendMessage: async (senderId: string, receiverId: string, content: string): Promise<Message> => {
+    // No delay for instant messaging
+    const response = await API.post('/messages', { senderId, receiverId, content });
+    return response.data;
+  },
+
+  getUnreadCount: async (userId: string): Promise<number> => {
+    const response = await API.get(`/messages/unread-count?userId=${userId}`);
+    const result = response.data;
+    return result.count || 0;
+  },
+
+  markAsRead: async (userId: string, senderId: string) => {
+    const response = await API.post('/messages/mark-as-read', { userId, senderId });
+    return response.data;
+  },
+
+  getConversation: async (user1Id: string, user2Id: string): Promise<Message[]> => {
+    const response = await API.get(`/messages/conversation?user1Id=${user1Id}&user2Id=${user2Id}`);
+    return response.data;
+  },
+
+  subscribeToConversation: (user1Id: string, user2Id: string, callback: (messages: Message[]) => void) => {
+    const checkMessages = async () => {
+        try {
+            const conversation = await apiService.getConversation(user1Id, user2Id);
+            callback(conversation);
+        } catch (error) {
+            console.error('Error fetching conversation:', error);
+        }
+    };
+
+    checkMessages(); // Initial
+    const interval = setInterval(checkMessages, 1000); // Polling every 1s for "real-time" feel
+    return () => clearInterval(interval);
+  },
+
+  getConversations: async (userId: string): Promise<User[]> => {
+    await delay(50); // Reduced from 300ms
+    const response = await API.get(`/conversations?userId=${userId}`);
+    return response.data;
+  },
+
+  // --- QUIZ ---
+  generateQuiz: async (skill: string, difficulty: string) => {
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`Attempt ${retryCount + 1}: Generating quiz for ${skill} (${difficulty})`);
+        
+        const response = await API.post('/quiz/generate', { skill, difficulty });
+        
+        const data = response.data;
+        console.log('Quiz generated successfully:', data);
+        return data;
+        
+      } catch (error: any) {
+        console.error(`Quiz generation error (attempt ${retryCount + 1}):`, error);
+        
+        if (retryCount === maxRetries - 1) {
+          throw new Error('Failed to generate quiz. Please try again.');
+        }
+        
+        retryCount++;
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
+    
+    throw new Error('Failed to generate quiz after multiple attempts');
+  },
+
+  // --- SKILL SUGGESTION ---
+  suggestSkills: async (currentSkills: string[], currentGoals: string[] = []) => {
+    try {
+      const skills = await suggestSkillsDirect(currentSkills, currentGoals);
+      return { skills };
+    } catch (error) {
+      console.error('Skill suggestion failed:', error);
+      throw new Error('Failed to suggest skills');
+    }
+  },
+
+  // --- ROADMAP GENERATION ---
+  generateRoadmap: async (skill: string) => {
+    try {
+      const roadmap = await generateRoadmapDirect(skill);
+      return { roadmap };
+    } catch (error) {
+      console.error('Roadmap generation failed:', error);
+      throw new Error('Failed to generate roadmap');
+    }
+  }
+};

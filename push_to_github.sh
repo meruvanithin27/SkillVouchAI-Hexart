@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# 🚀 SkillVouchAI GitHub Push Script
+# Instructions: Replace YOUR_TOKEN with your GitHub Personal Access Token
+
+echo "🔐 SkillVouchAI GitHub Push Script"
+echo "=================================="
+echo ""
+echo "Step 1: Get your Personal Access Token"
+echo "--------------------------------------"
+echo "1. Go to: https://github.com/settings/tokens"
+echo "2. Click 'Generate new token (classic)'"
+echo "3. Select scopes: repo (full control)"
+echo "4. Copy the generated token"
+echo ""
+echo "Step 2: Run the following commands"
+echo "-----------------------------------"
+echo "# Replace YOUR_TOKEN with your actual token:"
+echo "git remote set-url origin https://meruvanithin27:YOUR_TOKEN@github.com/meruvanithin27/SkillVouchAI.git"
+echo "git push -u origin main"
+echo ""
+echo "Step 3: Verify the push"
+echo "----------------------"
+echo "After successful push, visit: https://github.com/meruvanithin27/SkillVouchAI"
+echo ""
+echo "📁 Project Summary:"
+echo "• 75 files committed"
+echo "• 26,807 lines of code"
+echo "• Complete skill verification platform"
+echo "• MongoDB integration"
+echo "• Enhanced chatbot with Python peer recommendations"
+echo ""
+echo "✨ Your project will be live once you complete the authentication!"
