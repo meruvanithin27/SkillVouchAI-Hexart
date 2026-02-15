@@ -8,6 +8,9 @@ import rateLimit from "express-rate-limit";
 
 const app = express();
 
+// Trust proxy for production (Render)
+app.set('trust proxy', true);
+
 // Security middleware
 app.use(helmet());
 
