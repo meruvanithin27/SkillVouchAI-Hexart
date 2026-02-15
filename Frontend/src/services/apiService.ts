@@ -78,27 +78,28 @@ export const apiService = {
       // No delay for save operations to make them feel instant
       const response = await API.put(`/api/users/${user.id}`, user);
       
-      console.log('✅ User saved successfully:', response.data);
+      console.log(' User saved successfully:', response.data);
       
       // Update session if it's the current user
       const session = apiService.getCurrentSession();
       if (session && session.id === user.id) {
         apiService.setSession(user);
-        console.log('🔄 Session updated with new user data');
+        console.log(' Session updated with new user data');
       }
       
       return response.data;
     } catch (error: any) {
-      console.error('❌ Failed to save user:', error);
+      console.error(' Failed to save user:', error);
       console.error('Error details:', error.response?.data);
       
       // Don't throw the error to prevent breaking the UI
       // Instead, just log it and continue with local state update
       if (error.response?.status === 404) {
-        console.warn('⚠️ User not found on backend, but local state updated');
+        console.warn(' User not found on backend, but local state updated');
       } else if (error.response?.status === 403) {
-        console.warn('⚠️ Authentication failed, but local state updated');
+        console.warn(' Authentication failed, but local state updated');
       } else {
+        console.warn(' Backend save failed, but local state updated');
         console.warn('⚠️ Backend save failed, but local state updated');
       }
       
@@ -109,28 +110,28 @@ export const apiService = {
   // --- SKILL MANAGEMENT - Production Ready ---
   addKnownSkill: async (skillName: string, level: string = 'Beginner') => {
     const response = await API.post('/api/skills/known', { skillName, level });
-    return response.data.data.user;
+    return transformUserData(response.data.data.user);
   },
 
   addSkillToLearn: async (skillName: string, priority: string = 'Medium') => {
     const response = await API.post('/api/skills/learn', { skillName, priority });
-    return response.data.data.user;
+    return transformUserData(response.data.data.user);
   },
 
   removeKnownSkill: async (skillName: string) => {
     const response = await API.delete(`/api/skills/known/${encodeURIComponent(skillName)}`);
-    return response.data.data.user;
+    return transformUserData(response.data.data.user);
   },
 
   removeSkillToLearn: async (skillName: string) => {
     const response = await API.delete(`/api/skills/learn/${encodeURIComponent(skillName)}`);
-    return response.data.data.user;
+    return transformUserData(response.data.data.user);
   },
 
   // Enhanced profile fetch
   getProfile: async (): Promise<User> => {
     const response = await API.get('/api/user/profile');
-    return response.data.data.user;
+    return transformUserData(response.data.data.user);
   },
 
   // --- QUIZ RESULTS ---

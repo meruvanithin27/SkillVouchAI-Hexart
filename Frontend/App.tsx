@@ -89,27 +89,12 @@ function App() {
             console.log('🔄 Syncing user data with backend...');
             const freshUserData = await apiService.getProfile();
             
-            // Transform backend user data to frontend format
-            const transformedUser = {
-              id: freshUserData._id,
-              name: freshUserData.name || freshUserData.email.split('@')[0],
-              email: freshUserData.email,
-              avatar: freshUserData.avatar || '',
-              skillsKnown: freshUserData.knownSkills || [],
-              skillsToLearn: freshUserData.skillsToLearn || [],
-              bio: freshUserData.bio || '',
-              rating: freshUserData.rating || 5,
-              languages: freshUserData.languages || [],
-              preferredLanguage: freshUserData.preferredLanguage || 'English',
-              availability: freshUserData.availability || []
-            };
-            
             // Update local state and storage with fresh data
-            setUser(transformedUser);
-            localStorage.setItem('authUser', JSON.stringify(transformedUser));
+            setUser(freshUserData);
+            localStorage.setItem('authUser', JSON.stringify(freshUserData));
             console.log('✅ User data synced with backend -', 
-                       transformedUser.knownSkills.length, 'known skills,', 
-                       transformedUser.skillsToLearn.length, 'learning goals');
+                       freshUserData.skillsKnown.length, 'known skills,', 
+                       freshUserData.skillsToLearn.length, 'learning goals');
             
           } catch (syncError) {
             console.warn('⚠️ Failed to sync with backend, using cached data:', syncError);
