@@ -5,10 +5,22 @@
   "javascript.validate.enable": true,
   "typescript.tsserver.experimental.enableProjectDiagnostics": false,
   "typescript.tsserver.maxTsServerMemory": 2048,
+  "typescript.disableAutomaticTypeAcquisition": true,
+  "typescript.tsserver.useSeparateSyntaxServer": false,
+  "typescript.tsserver.enableTracing": false,
+  "typescript.tsserver.watchOptions": {},
+  "typescript.preferences.quoteStyle": "single",
+  "javascript.preferences.quoteStyle": "single",
   "files.exclude": {
+    "**/*.js.map": true,
+    "**/*.d.ts": true,
+    "**/node_modules": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
     "**/*.js.map": true,
     "**/*.d.ts": true
   },
-  "typescript.preferences.quoteStyle": "single",
-  "javascript.preferences.quoteStyle": "single"
+  "typescript.surveys.enabled": false,
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false
 }
