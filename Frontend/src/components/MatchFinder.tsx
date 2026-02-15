@@ -18,55 +18,84 @@ export const MatchFinder: React.FC<MatchFinderProps> = ({ currentUser, onMessage
   const [strictMode, setStrictMode] = useState(false);
   const [strictMatches, setStrictMatches] = useState<User[]>([]);
 
-  // Client-side heuristic to determine a base score before AI refinement
-  const calculateBaseScore = (me: User, candidate: User): number => {
-      let score = 0;
+  // Enhanced keyword matching with flexible and strict modes
+  const calculateKeywordScore = (me: User, candidate: User, strictMode: boolean = false): number => {
+    let score = 0;
 
-      // 1. Skill Complementarity (Max 60 pts)
-      // Does candidate have skills I want?
-      const usefulSkills = candidate.skillsKnown.filter(s => me.skillsToLearn.some(
-          want => want.toLowerCase() === s.name.toLowerCase()
-      ));
+    // Extract comprehensive keywords from user profile
+    const extractKeywords = (user: User): string[] => {
+      const keywords: string[] = [];
 
-      if (usefulSkills.length > 0) {
-          score += 30; // Base match found
-          
-          // Find the highest quality skill among the matching ones
-          const bestSkill = usefulSkills.reduce((prev, current) => (prev.score || 0) > (current.score || 0) ? prev : current);
+      // Bio keywords (split by common delimiters)
+      if (user.bio) {
+        const bioWords = user.bio.toLowerCase()
+          .split(/[\s,.;!?]+/)
+          .filter(word => word.length > 3)
+          .map(word => word.replace(/[^\w]/g, ''));
+        keywords.push(...bioWords);
+      }
 
-          // Verified Score Bonus
-          if (bestSkill.verified && bestSkill.score) {
-              // Map quiz score (0-100) to match points (0-30)
-              // A perfect quiz score (100) adds 30 points to compatibility
-              score += Math.round((bestSkill.score / 100) * 30);
-          } else if (bestSkill.verified) {
-               // Fallback if verified but no score (legacy data), assume passing grade
-               score += 20;
+      // Skills as keywords
+      const knownSkills = user.skillsKnown.map(s => s.name.toLowerCase());
+      const learnSkills = user.skillsToLearn.map((s: any) =>
+        typeof s === 'string' ? s.toLowerCase() : (s.skillName || '').toLowerCase()
+      );
+      keywords.push(...knownSkills, ...learnSkills);
+
+      // Languages and other profile data
+      if (user.languages) keywords.push(...user.languages.map(l => l.toLowerCase()));
+      if (user.preferredLanguage) keywords.push(user.preferredLanguage.toLowerCase());
+
+      // Remove duplicates and common words
+      const commonWords = new Set(['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her', 'was', 'one', 'our', 'had', 'but', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'who', 'boy', 'did', 'her', 'its', 'let', 'put', 'say', 'she', 'too', 'use']);
+      return [...new Set(keywords)].filter(word => !commonWords.has(word) && word.length > 2);
+    };
+
+    const myKeywords = extractKeywords(me);
+    const theirKeywords = extractKeywords(candidate);
+
+    if (strictMode) {
+      // Strict mode: Require exact keyword matches (case-insensitive)
+      const exactMatches = myKeywords.filter(myWord =>
+        theirKeywords.some(theirWord =>
+          theirWord === myWord || theirWord.includes(myWord) || myWord.includes(theirWord)
+        )
+      );
+      score = Math.min(30, exactMatches.length * 5); // Max 30 points for keyword matches in strict mode
+    } else {
+      // Flexible mode: Partial and fuzzy keyword matching
+      let totalMatches = 0;
+
+      myKeywords.forEach(myWord => {
+        // Exact match (highest weight)
+        if (theirKeywords.includes(myWord)) {
+          totalMatches += 3;
+        }
+        // Partial match (contains/includes)
+        else if (theirKeywords.some(word => word.includes(myWord) || myWord.includes(word))) {
+          totalMatches += 2;
+        }
+        // Fuzzy match (similar words)
+        else if (theirKeywords.some(word => {
+          // Simple Levenshtein distance approximation
+          const distance = Math.abs(word.length - myWord.length);
+          if (distance <= 1) {
+            let diffCount = 0;
+            for (let i = 0; i < Math.min(word.length, myWord.length); i++) {
+              if (word[i] !== myWord[i]) diffCount++;
+            }
+            return diffCount <= 2;
           }
-      }
-
-      // 2. Reciprocity (Max 30 pts)
-      // Do I have skills candidate wants? (Mutual exchange is better)
-      const canITeach = me.skillsKnown.filter(s => candidate.skillsToLearn.some(
-          want => want.toLowerCase() === s.name.toLowerCase()
-      ));
-
-      if (canITeach.length > 0) {
-          score += 20;
-          // Bonus if *I* am verified in what I teach (High quality exchange)
-          if (canITeach.some(s => s.verified)) score += 10;
-      }
-
-      // 3. Bio Keyword Overlap (Max 10 pts)
-      const myKeywords = (me.bio || '').toLowerCase().split(/\W+/).filter(w => w.length > 4);
-      const theirBio = (candidate.bio || '').toLowerCase();
-      let keywordMatches = 0;
-      myKeywords.forEach(word => {
-          if (theirBio.includes(word)) keywordMatches++;
+          return false;
+        })) {
+          totalMatches += 1;
+        }
       });
-      score += Math.min(10, keywordMatches * 2);
 
-      return Math.min(100, score);
+      score = Math.min(25, totalMatches); // Max 25 points for flexible keyword matching
+    }
+
+    return score;
   };
 
   const fetchMatches = async () => {
@@ -89,13 +118,54 @@ export const MatchFinder: React.FC<MatchFinderProps> = ({ currentUser, onMessage
         baseScore: calculateBaseScore(currentUser, user)
     })).sort((a, b) => b.baseScore - a.baseScore).slice(0, 6); // Take top 6 for deep analysis
 
-    const results: MatchRecommendation[] = [];
+  // Enhanced base score calculation with keyword matching
+  const calculateBaseScore = (me: User, candidate: User): number => {
+      let score = 0;
 
-    for (const item of scoredCandidates) {
-      try {
-        // We pass the base score logic into reasoning potentially, but rely on Gemini for the "soft" match
-        // Note: AI Analysis is expensive, so we only do it for top candidates
-        const analysis = await analyzeMatch(currentUser, item.user);
+      // 1. Skill Complementarity (Max 50 pts)
+      // Does candidate have skills I want?
+      const usefulSkills = candidate.skillsKnown.filter(s => me.skillsToLearn.some(
+          want => typeof want === 'string'
+            ? want.toLowerCase() === s.name.toLowerCase()
+            : (want.skillName || '').toLowerCase() === s.name.toLowerCase()
+      ));
+
+      if (usefulSkills.length > 0) {
+          score += 25; // Base match found
+
+          // Find the highest quality skill among the matching ones
+          const bestSkill = usefulSkills.reduce((prev, current) => (prev.score || 0) > (current.score || 0) ? prev : current);
+
+          // Verified Score Bonus
+          if (bestSkill.verified && bestSkill.score) {
+              // Map quiz score (0-100) to match points (0-25)
+              score += Math.round((bestSkill.score / 100) * 25);
+          } else if (bestSkill.verified) {
+               // Fallback if verified but no score (legacy data), assume passing grade
+               score += 15;
+          }
+      }
+
+      // 2. Reciprocity (Max 25 pts)
+      // Do I have skills candidate wants? (Mutual exchange is better)
+      const canITeach = me.skillsKnown.filter(s => candidate.skillsToLearn.some(
+          want => typeof want === 'string'
+            ? want.toLowerCase() === s.name.toLowerCase()
+            : (want.skillName || '').toLowerCase() === s.name.toLowerCase()
+      ));
+
+      if (canITeach.length > 0) {
+          score += 15;
+          // Bonus if *I* am verified in what I teach (High quality exchange)
+          if (canITeach.some(s => s.verified)) score += 10;
+      }
+
+      // 3. Keyword Matching (Max 25 pts for flexible mode)
+      const keywordScore = calculateKeywordScore(me, candidate, false); // Always use flexible for base score
+      score += keywordScore;
+
+      return Math.min(100, score);
+  };
         
         // Weighted Average: 40% Base Heuristic + 60% AI Insight
         const finalScore = Math.round((item.baseScore * 0.4) + (analysis.score * 0.6));

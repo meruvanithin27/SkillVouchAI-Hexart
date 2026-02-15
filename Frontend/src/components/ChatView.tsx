@@ -1,17 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Message, ExchangeRequest } from '../types';
 import { dbService } from '../services/dbService';
-import { Send, Search, MessageSquare, Lock, UserPlus, Video, ExternalLink, CheckCircle2, X, Star } from 'lucide-react';
+import { Send, Search, MessageSquare, Lock, UserPlus, Video, ExternalLink, CheckCircle2, X, Star, Shield, Wifi, WifiOff, Clock, Check, CheckCheck } from 'lucide-react';
 
 interface ChatViewProps {
   currentUser: User;
-  initialChatUserId?: string; // Optional: ID of user to start/open chat with
+  initialChatUserId?: string;
+}
+
+interface EnhancedMessage extends Message {
+  reactions?: { emoji: string; users: string[]; count: number }[];
+  edited?: boolean;
+  editedAt?: Date;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({ currentUser, initialChatUserId }) => {
   const [conversations, setConversations] = useState<User[]>([]);
   const [activeUser, setActiveUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<EnhancedMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [foundFriends, setFoundFriends] = useState<User[]>([]);
@@ -21,7 +27,24 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser, initialChatUser
   const [feedbackStars, setFeedbackStars] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [messageReactions, setMessageReactions] = useState<Record<string, { emoji: string; users: string[]; count: number }[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Simulate online status (in real app, this would come from WebSocket)
+  useEffect(() => {
+    const simulateOnlineStatus = () => {
+      const online = new Set<string>();
+      conversations.forEach(user => {
+        if (Math.random() > 0.3) online.add(user.id); // 70% chance of being online
+      });
+      setOnlineUsers(online);
+    };
+
+    simulateOnlineStatus();
+    const interval = setInterval(simulateOnlineStatus, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, [conversations]);
 
   // Load conversations and optionally set initial active user
   useEffect(() => {
@@ -154,13 +177,48 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser, initialChatUser
     window.open(raw, '_blank', 'noreferrer');
   };
 
-  const shareMyDiscordLink = async () => {
-    if (!activeUser) return;
-    if (!currentUser.discordLink) {
-      alert('Please add your Discord link in Profile first.');
-      return;
+  // Handle message reactions
+  const handleReaction = async (messageId: string, emoji: string) => {
+    // In a real app, this would update the message reactions in the database
+    const currentReactions = messageReactions[messageId] || [];
+    const existingReaction = currentReactions.find(r => r.emoji === emoji);
+
+    if (existingReaction) {
+      if (existingReaction.users.includes(currentUser.id)) {
+        // Remove user's reaction
+        existingReaction.users = existingReaction.users.filter(id => id !== currentUser.id);
+        existingReaction.count--;
+
+        if (existingReaction.count === 0) {
+          setMessageReactions(prev => ({
+            ...prev,
+            [messageId]: prev[messageId].filter(r => r.emoji !== emoji)
+          }));
+        }
+      } else {
+        // Add user's reaction
+        existingReaction.users.push(currentUser.id);
+        existingReaction.count++;
+      }
+    } else {
+      // Add new reaction
+      const newReaction = { emoji, users: [currentUser.id], count: 1 };
+      setMessageReactions(prev => ({
+        ...prev,
+        [messageId]: [...(prev[messageId] || []), newReaction]
+      }));
     }
-    await dbService.sendMessage(currentUser.id, activeUser.id, `Discord link: ${currentUser.discordLink}`);
+  };
+
+  // Handle starting new chat with user
+  const handleStartNewChat = async (user: User) => {
+    setActiveUser(user);
+    setSearchQuery('');
+    setFoundFriends([]);
+
+    // Load messages for this conversation
+    const msgs = await dbService.getMessages(currentUser.id, user.id);
+    setMessages(msgs);
   };
 
   const handleUpdateExchangeStatus = async (status: ExchangeRequest['status']) => {
@@ -532,54 +590,32 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser, initialChatUser
                                     isMe 
                                     ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm hover:from-indigo-600 hover:to-indigo-700' 
                                     : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-bl-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750'
-                                }`}>
-                                    <p className="text-sm leading-relaxed">{msg.content}</p>
-                                    <div className={`absolute bottom-0 ${
-                                        isMe 
-                                        ? 'right-0 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-indigo-600 border-t-[8px] border-t-indigo-600' 
-                                        : 'left-0 w-0 h-0 border-l-[8px] border-l-white dark:border-l-slate-800 border-r-[8px] border-r-transparent border-t-[8px] border-t-white dark:border-t-slate-800'
-                                    } transform translate-y-1`}></div>
-                                </div>
-                                <div className={`mt-1 flex items-center justify-end space-x-2 px-1 ${
-                                    isMe ? 'justify-end' : 'justify-start'
-                                }`}>
-                                    <span className={`text-xs ${
-                                        isMe 
-                                        ? 'text-indigo-100' 
-                                        : 'text-slate-500 dark:text-slate-400'
-                                    }`}>
-                                        {formatTime(msg.timestamp)}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                  })
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input Area */}
-            <form onSubmit={handleSendMessage} className="p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800">
-              <div className="flex space-x-3 max-w-4xl mx-auto">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Type a secure message..."
-                    className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-5 py-3.5 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  </div>
                 </div>
-                <button 
-                    type="submit"
-                    disabled={!newMessage.trim()} 
-                    className="bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed text-white p-3.5 rounded-xl transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl disabled:shadow-none"
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Message Input - Discord-like */}
+        {activeUser && (
+          <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800/50 px-6 py-4">
+            <div className="flex items-end space-x-3">
+              <div className="flex-1 relative">
+                <textarea
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                  placeholder={`Message @${activeUser.name}...`}
+                  className="w-full resize-none rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32"
+                  rows={1}
+                  style={{ minHeight: '44px' }}
+                />
+                <button
+                  onClick={() => setNewMessage('')}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 >
-                  <Send className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
               <div className="flex items-center justify-center mt-3">
