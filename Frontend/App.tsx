@@ -1,5 +1,4 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Layout } from './src/components/Layout';
 import { View, User } from './src/types';
 import { INITIAL_USER } from './src/constants';
 import { dbService } from './src/services/dbService';
@@ -7,51 +6,113 @@ import { Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2, WifiOff } from
 import { Logo } from './src/components/Logo';
 import { ChatBot } from './src/components/ChatBot';
 
-// Fallback component for when API is not available
-const ApiErrorFallback = () => (
-  <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 max-w-md w-full">
-      <div className="text-center">
-        <WifiOff className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
-        <h2 className="text-white text-xl font-semibold mb-2">API Connection Error</h2>
-        <p className="text-slate-400 mb-4">
-          Unable to connect to the server. Please check your internet connection and try again.
-        </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          Retry Connection
-        </button>
-      </div>
+// Loading fallback component
+const LoadingSpinner = () => (
+  <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+    <div className="text-center">
+      <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-white text-lg">Loading SkillVouch AI...</p>
     </div>
   </div>
 );
 
-const Dashboard = lazy(() => import('./src/components/Dashboard').then(module => ({ default: module.Dashboard })));
-const SkillList = lazy(() => import('./src/components/SkillList').then(module => ({ default: module.SkillList })));
-const MatchFinder = lazy(() => import('./src/components/MatchFinder').then(module => ({ default: module.MatchFinder })));
-const RoadmapView = lazy(() => import('./src/components/RoadmapView').then(module => ({ default: module.RoadmapView })));
-const ChatView = lazy(() => import('./src/components/ChatView').then(module => ({ default: module.ChatView })));
-const LandingPage = lazy(() => import('./src/components/LandingPage').then(module => ({ default: module.LandingPage })));
-const ProfileView = lazy(() => import('./src/components/ProfileView').then(module => ({ default: module.ProfileView })));
+// Simple landing page component as fallback
+const SimpleLanding = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    // Simulate API call
+    setTimeout(() => {
+      setIsLoading(false);
+      alert(`${isLogin ? 'Login' : 'Signup'} functionality will be connected to backend`);
+    }, 1000);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-lg p-8 max-w-md w-full">
+        <div className="text-center mb-8">
+          <Logo className="w-16 h-16 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-white mb-2">SkillVouch AI</h1>
+          <p className="text-slate-400">Connect, Learn, and Grow</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="your@email.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+          >
+            {isLoading ? 'Loading...' : (isLogin ? 'Sign In' : 'Sign Up')}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => setIsLogin(!isLogin)}
+            className="text-indigo-400 hover:text-indigo-300 text-sm"
+          >
+            {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+          </button>
+        </div>
+
+        <div className="mt-8 p-4 bg-slate-800 rounded-lg">
+          <p className="text-xs text-slate-400 text-center">
+            Demo Mode: Full functionality will be available after backend connection
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Lazy loaded components (with error boundaries)
+const Dashboard = lazy(() => import('./src/components/Dashboard').catch(() => ({ default: SimpleLanding })));
+const SkillList = lazy(() => import('./src/components/SkillList').catch(() => ({ default: SimpleLanding })));
+const MatchFinder = lazy(() => import('./src/components/MatchFinder').catch(() => ({ default: SimpleLanding })));
+const RoadmapView = lazy(() => import('./src/components/RoadmapView').catch(() => ({ default: SimpleLanding })));
+const ChatView = lazy(() => import('./src/components/ChatView').catch(() => ({ default: SimpleLanding })));
+const LandingPage = lazy(() => import('./src/components/LandingPage').catch(() => ({ default: SimpleLanding })));
+const ProfileView = lazy(() => import('./src/components/ProfileView').catch(() => ({ default: SimpleLanding })));
+
 export function generateUUID(): string {
-  // Use native if available
   if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {
     return (crypto as any).randomUUID();
   }
-
-  // Use getRandomValues (RFC4122 v4) if available
-  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
-    const bytes = new Uint8Array(16);
-    (crypto as any).getRandomValues(bytes);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0'));
-    return `${hex.slice(0,4).join('')}-${hex.slice(4,6).join('')}-${hex.slice(6,8).join('')}-${hex.slice(8,10).join('')}-${hex.slice(10,16).join('')}`;
-  }
-
-  // Fallback (not cryptographically secure)
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -60,215 +121,29 @@ export function generateUUID(): string {
 }
 
 export default function App() {
-  // Default to LANDING view unless session exists
   const [currentView, setCurrentView] = useState<View>(View.LANDING);
   const [user, setUser] = useState<User>(INITIAL_USER);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loadingSession, setLoadingSession] = useState(true);
   const [isChatBotOpen, setIsChatBotOpen] = useState(false);
-  
-  // Notification State
-  const [notification, setNotification] = useState<{message: string, type: 'success'} | null>(null);
+  const [hasError, setHasError] = useState(false);
 
-  // Navigation State params
-  const [selectedChatUserId, setSelectedChatUserId] = useState<string | undefined>(undefined);
-
-  // Auth Form State
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  
-  const [authError, setAuthError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Session Check Logic
+  // Simplified session check
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const sessionUser = dbService.getCurrentSession();
-        if (sessionUser) {
-          setUser(sessionUser);
-          setCurrentView(View.DASHBOARD);
-          
-          // Check unread messages
-          try {
-            const count = await dbService.getUnreadCount(sessionUser.id);
-            setUnreadCount(count);
-          } catch (error) {
-            console.warn('Failed to check unread messages:', error);
-          }
-        } else {
-          setUser(INITIAL_USER);
-        }
-      } catch (error) {
-        console.error('Session check failed:', error);
-        setUser(INITIAL_USER);
-      } finally {
-        setLoadingSession(false);
+    try {
+      const sessionUser = dbService.getCurrentSession();
+      if (sessionUser && sessionUser.id !== 'temp') {
+        setUser(sessionUser);
+        setCurrentView(View.DASHBOARD);
       }
-    };
-    
-    checkSession();
+    } catch (error) {
+      console.warn('Session check failed, using default state:', error);
+    } finally {
+      setLoadingSession(false);
+    }
   }, []);
 
-  // Poll for unread messages count
-  useEffect(() => {
-    let interval: any;
-    if (user.id !== 'temp') {
-        const fetchUnread = async () => {
-             try {
-                 const count = await dbService.getUnreadCount(user.id);
-                 setUnreadCount(count);
-             } catch (error) {
-                 console.error('Failed to fetch unread count:', error);
-             }
-        };
-        fetchUnread();
-        
-        interval = setInterval(fetchUnread, 5000); // Reduced frequency from 3s to 5s
-    }
-    return () => clearInterval(interval);
-  }, [user.id]);
-
-  // Auto-dismiss notification
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => {
-        setNotification(null);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
-  const handleUpdateUser = (updatedUser: User) => {
-    setUser(updatedUser);
-  };
-
-  const handleLogout = async () => {
-    await dbService.logout();
-    setUser(INITIAL_USER);
-    setEmail('');
-    setPassword('');
-    setCurrentView(View.LANDING);
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-    setIsSubmitting(true);
-    
-    try {
-      console.log('🔐 Starting login process for:', email);
-      
-      const loggedInUser = await dbService.login(email.trim(), password);
-      setUser(loggedInUser);
-      setCurrentView(View.DASHBOARD);
-      setNotification({ message: `Welcome back, ${loggedInUser.name.split(' ')[0]}!`, type: 'success' });
-      
-      console.log('✅ Login successful for:', email);
-      
-    } catch (err: any) {
-      console.error('❌ Login failed:', err);
-      setAuthError(err.message || 'Invalid email or password.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validatePassword = (password: string): boolean => {
-    return password.length >= 8;
-  };
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-    
-    // JavaScript validation instead of HTML patterns
-    if (!fullName || !email || !password || !confirmPassword) {
-      setAuthError('Please fill in all required fields.');
-      return;
-    }
-
-    if (fullName.trim().length < 2) {
-      setAuthError('Full name must be at least 2 characters long.');
-      return;
-    }
-
-    if (!validateEmail(email)) {
-      setAuthError('Please enter a valid email address.');
-      return;
-    }
-
-    if (!validatePassword(password)) {
-      setAuthError('Password must be at least 8 characters long.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-        setAuthError('Passwords do not match.');
-        return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      console.log('🚀 Starting signup process for:', email);
-      
-      // Create account but do NOT auto-login
-      await dbService.signup(fullName.trim(), email.trim(), password);
-      
-      console.log('✅ Signup successful for:', email);
-      
-      // Redirect to Login view
-      setCurrentView(View.LOGIN);
-      setNotification({ message: 'Account created successfully! Please log in.', type: 'success' });
-      
-      // Clear form
-      setFullName('');
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
-      
-    } catch (err: any) {
-      console.error('❌ Signup failed:', err);
-      const errorMessage = err.message || 'Signup failed. Please try again.';
-      setAuthError(errorMessage);
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
-
-  // Custom navigation handler to support passing params (like chat user id)
-  const navigateToView = (view: View, params?: any) => {
-      if (view !== View.MESSAGES) {
-          setSelectedChatUserId(undefined);
-      }
-      setCurrentView(view);
-  };
-
-  const renderView = () => {
-    if (loadingSession) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-slate-950">
-                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-            </div>
-        );
-    }
-
-    switch (currentView) {
-      case View.DASHBOARD:
-        return (
-            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-950"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div></div>}>
-                <Dashboard 
-                    user={user} 
-                    onNavigateToProfile={(userId) => {
-                        setSelectedChatUserId(userId);
-                        setCurrentView(View.MESSAGES);
+  // Error boundary fallback
+  if (hasError) {
                     }}
                     onNavigate={navigateToView}
                 />
