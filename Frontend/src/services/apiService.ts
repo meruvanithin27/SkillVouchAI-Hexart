@@ -53,13 +53,13 @@ export const apiService = {
   // --- USER MGMT ---
   getUsers: async (): Promise<User[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await API.get('/users');
+    const response = await API.get('/api/users');
     return response.data;
   },
 
   getUserById: async (id: string): Promise<User | undefined> => {
     try {
-      const response = await API.get(`/users/${id}`);
+      const response = await API.get(`/api/users/${id}`);
       return response.data;
     } catch {
       return undefined;
@@ -71,7 +71,7 @@ export const apiService = {
       console.log('💾 Saving user to backend:', user.id, user.email);
       
       // No delay for save operations to make them feel instant
-      const response = await API.put(`/users/${user.id}`, user);
+      const response = await API.put(`/api/users/${user.id}`, user);
       
       console.log('✅ User saved successfully:', response.data);
       
@@ -103,39 +103,39 @@ export const apiService = {
 
   // --- SKILL MANAGEMENT - Production Ready ---
   addKnownSkill: async (skillName: string, level: string = 'Beginner') => {
-    const response = await API.post('/skills/known', { skillName, level });
+    const response = await API.post('/api/skills/known', { skillName, level });
     return response.data.data.user;
   },
 
   addSkillToLearn: async (skillName: string, priority: string = 'Medium') => {
-    const response = await API.post('/skills/learn', { skillName, priority });
+    const response = await API.post('/api/skills/learn', { skillName, priority });
     return response.data.data.user;
   },
 
   removeKnownSkill: async (skillName: string) => {
-    const response = await API.delete(`/skills/known/${encodeURIComponent(skillName)}`);
+    const response = await API.delete(`/api/skills/known/${encodeURIComponent(skillName)}`);
     return response.data.data.user;
   },
 
   removeSkillToLearn: async (skillName: string) => {
-    const response = await API.delete(`/skills/learn/${encodeURIComponent(skillName)}`);
+    const response = await API.delete(`/api/skills/learn/${encodeURIComponent(skillName)}`);
     return response.data.data.user;
   },
 
   // Enhanced profile fetch
   getProfile: async (): Promise<User> => {
-    const response = await API.get('/user/profile');
+    const response = await API.get('/api/user/profile');
     return response.data.data.user;
   },
 
   // --- QUIZ RESULTS ---
   saveQuizResult: async (skillName: string, score: number, questions: any[], level?: string) => {
-    const response = await API.post('/quiz/result', { skillName, score, questions, level });
+    const response = await API.post('/api/quiz/result', { skillName, score, questions, level });
     return response.data.data;
   },
 
   getQuizResults: async () => {
-    const response = await API.get('/quiz/results');
+    const response = await API.get('/api/quiz/results');
     return response.data.data.results;
   },
 
@@ -213,57 +213,57 @@ export const apiService = {
   // --- REQUESTS ---
   createExchangeRequest: async (request: ExchangeRequest) => {
     await delay(50); // Reduced from 300ms
-    const response = await API.post('/requests', request);
+    const response = await API.post('/api/requests', request);
     return response.data;
   },
 
   getRequestsForUser: async (userId: string): Promise<ExchangeRequest[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await API.get(`/requests?userId=${userId}`);
+    const response = await API.get(`/api/requests?userId=${userId}`);
     return response.data;
   },
 
   updateExchangeRequestStatus: async (id: string, status: ExchangeRequest['status']): Promise<{ success: true; status: ExchangeRequest['status']; completedAt?: number; }> => {
-    const response = await API.put(`/requests/${id}/status`, { status });
+    const response = await API.put(`/api/requests/${id}/status`, { status });
     return response.data;
   },
 
   // --- FEEDBACK ---
   submitExchangeFeedback: async (feedback: Omit<ExchangeFeedback, 'id' | 'createdAt'> & Partial<Pick<ExchangeFeedback, 'id' | 'createdAt'>>): Promise<ExchangeFeedback> => {
-    const response = await API.post('/feedback', feedback);
+    const response = await API.post('/api/feedback', feedback);
     return response.data;
   },
 
   getReceivedFeedback: async (userId: string): Promise<ExchangeFeedback[]> => {
-    const response = await API.get(`/feedback/received?userId=${userId}`);
+    const response = await API.get(`/api/feedback/received?userId=${userId}`);
     return response.data;
   },
 
   getFeedbackStats: async (userId: string): Promise<{ avgStars: number; count: number }> => {
-    const response = await API.get(`/feedback/stats?userId=${userId}`);
+    const response = await API.get(`/api/feedback/stats?userId=${userId}`);
     return response.data;
   },
 
   // --- MESSAGING ---
   sendMessage: async (senderId: string, receiverId: string, content: string): Promise<Message> => {
     // No delay for instant messaging
-    const response = await API.post('/messages', { senderId, receiverId, content });
+    const response = await API.post('/api/messages', { senderId, receiverId, content });
     return response.data;
   },
 
   getUnreadCount: async (userId: string): Promise<number> => {
-    const response = await API.get(`/messages/unread-count?userId=${userId}`);
+    const response = await API.get(`/api/messages/unread-count?userId=${userId}`);
     const result = response.data;
     return result.count || 0;
   },
 
   markAsRead: async (userId: string, senderId: string) => {
-    const response = await API.post('/messages/mark-as-read', { userId, senderId });
+    const response = await API.post('/api/messages/mark-as-read', { userId, senderId });
     return response.data;
   },
 
   getConversation: async (user1Id: string, user2Id: string): Promise<Message[]> => {
-    const response = await API.get(`/messages/conversation?user1Id=${user1Id}&user2Id=${user2Id}`);
+    const response = await API.get(`/api/messages/conversation?user1Id=${user1Id}&user2Id=${user2Id}`);
     return response.data;
   },
 
@@ -297,7 +297,7 @@ export const apiService = {
       try {
         console.log(`Attempt ${retryCount + 1}: Generating quiz for ${skill} (${difficulty})`);
         
-        const response = await API.post('/quiz/generate', { skill, difficulty });
+        const response = await API.post('/api/quiz/generate', { skill, difficulty });
         
         const data = response.data;
         console.log('Quiz generated successfully:', data);
