@@ -1,6 +1,6 @@
-import { User, ExchangeRequest, Message, ExchangeFeedback } from '../types';
-import { suggestSkillsDirect, generateRoadmapDirect } from './mistralDirectService';
-import API from './axiosService';
+import { API } from './axiosService';
+import { User, Skill, QuizQuestion } from '../types';
+import { transformUserData } from './transformUserData';
 
 // Helper to simulate delay for "real" feel (reduced for better performance)
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -352,8 +352,8 @@ export const apiService = {
   // --- SKILL SUGGESTION ---
   suggestSkills: async (currentSkills: string[], currentGoals: string[] = []) => {
     try {
-      const skills = await suggestSkillsDirect(currentSkills, currentGoals);
-      return { skills };
+      const response = await API.post('/api/skills/suggest', { currentSkills, currentGoals });
+      return response.data;
     } catch (error) {
       console.error('Skill suggestion failed:', error);
       throw new Error('Failed to suggest skills');
@@ -363,11 +363,11 @@ export const apiService = {
   // --- ROADMAP GENERATION ---
   generateRoadmap: async (skill: string) => {
     try {
-      const roadmap = await generateRoadmapDirect(skill);
-      return { roadmap };
+      const response = await API.post('/api/roadmap/generate', { skill });
+      return response.data;
     } catch (error) {
       console.error('Roadmap generation failed:', error);
       throw new Error('Failed to generate roadmap');
     }
-  }
+  },
 };
