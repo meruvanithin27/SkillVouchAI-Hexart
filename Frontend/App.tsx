@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Logo } from './src/components/Logo';
+import API from './src/services/axiosService';
 
 // Environment validation
 const API_URL = import.meta.env.VITE_API_URL;
@@ -43,14 +44,22 @@ export default function App() {
 
     try {
       console.log("🔍 Testing backend health...");
-      const response = await fetch(`${API_URL}/api/health`);
-      const data = await response.json();
-      console.log("✅ Backend Health:", data);
+      const res = await API.get("/api/health");
+      console.log("Backend Status:", res.data);
+      
+      // Update database status based on response
+      if (res.data.database === "connected") {
+        setDbStatus('ok');
+      } else {
+        setDbStatus('error');
+      }
+      
       setApiStatus('ok');
     } catch (error) {
-      console.error("❌ Backend health check failed:", error);
+      console.error("Backend Error:", error.message);
       setApiError(error instanceof Error ? error.message : 'Unknown error');
       setApiStatus('error');
+      setDbStatus('error');
     }
   };
 

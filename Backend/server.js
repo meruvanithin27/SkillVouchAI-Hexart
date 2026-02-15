@@ -11,16 +11,8 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 // Production-ready CORS configuration
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'https://skillvouch-hexart.vercel.app',
-  'https://skillvouch-ai-frontend.vercel.app',
-  'http://localhost:3001',
-  'http://localhost:5173'
-].filter(Boolean);
-
 app.use(cors({
-  origin: allowedOrigins,
+  origin: "https://skillvouch-hexart.vercel.app",
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -32,9 +24,10 @@ app.use(express.urlencoded({ extended: true }));
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   console.log('🔍 Health check requested');
-  res.json({
+  res.status(200).json({
     status: "ok",
-    message: "Backend Connected Successfully",
+    message: "Backend connected",
+    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
     timestamp: new Date(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
