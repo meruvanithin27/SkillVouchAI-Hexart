@@ -54,7 +54,7 @@ function App() {
         if (response.data.success) {
           setSystemStatus({
             backend: 'success',
-            database: response.data.data.database === 'connected' ? 'success' : 'error'
+            database: response.data.data.databaseConnected ? 'success' : 'error'
           });
         }
       } catch (err) {
@@ -66,6 +66,26 @@ function App() {
     };
 
     checkHealth();
+    
+    // Periodically check database status
+    const interval = setInterval(async () => {
+      try {
+        const response = await API.get('/api/test-db');
+        if (response.data.success) {
+          setSystemStatus(prev => ({
+            ...prev,
+            database: 'success'
+          }));
+        }
+      } catch (err) {
+        setSystemStatus(prev => ({
+          ...prev,
+          database: 'error'
+        }));
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
   }, []);
 
   // Check for existing auth

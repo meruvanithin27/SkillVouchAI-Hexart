@@ -23,13 +23,100 @@ console.log(`🔗 MongoDB URI: ${MONGO_URI ? 'Set' : 'Missing'}`);
 console.log(`🔐 JWT Secret: ${JWT_SECRET ? 'Set' : 'Missing'}`);
 console.log(`🚀 PORT: ${PORT}`);
 
-// MongoDB connection
-mongoose.connect(MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => {
-    console.error("❌ MongoDB Connection Error:", err.message);
-    // Don't exit, continue with limited functionality
-  });
+// Database connection state
+let dbConnectionState = {
+  isConnected: false,
+  retryCount: 0,
+  maxRetries: 5,
+  retryDelay: 5000
+};
+
+// Robust MongoDB connection with retry logic
+const connectDB = async () => {
+  if (dbConnectionState.isConnected) {
+    console.log('✅ MongoDB already connected');
+    return;
+  }
+
+  if (dbConnectionState.retryCount >= dbConnectionState.maxRetries) {
+    console.error('❌ Max retry attempts reached. Giving up.');
+    return;
+  }
+
+  try {
+    console.log(`🔄 Connecting to MongoDB... (Attempt ${dbConnectionState.retryCount + 1}/${dbConnectionState.maxRetries})`);
+    
+    const options = {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,
+      heartbeatFrequencyMS: 10000,
+      retryWrites: true,
+      retryReads: true,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+    };
+
+    await mongoose.connect(MONGO_URI, options);
+    
+    dbConnectionState.isConnected = true;
+    dbConnectionState.retryCount = 0;
+    
+    console.log('✅ MongoDB Connected Successfully');
+    console.log(`📍 Connected to: ${mongoose.connection.host}`);
+    console.log(`🗄️ Database: ${mongoose.connection.name}`);
+    
+  } catch (error) {
+    dbConnectionState.retryCount++;
+    console.error(`❌ MongoDB Connection Error (Attempt ${dbConnectionState.retryCount}):`, error.message);
+    
+    if (dbConnectionState.retryCount < dbConnectionState.maxRetries) {
+      console.log(`🔄 Retrying in ${dbConnectionState.retryDelay / 1000} seconds...`);
+      setTimeout(connectDB, dbConnectionState.retryDelay);
+    } else {
+      console.error('❌ Failed to connect to MongoDB after maximum retries');
+    }
+  }
+};
+
+// Database connection monitoring
+mongoose.connection.on('connected', () => {
+  console.log('🟢 Mongoose connected to MongoDB');
+  dbConnectionState.isConnected = true;
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('🔴 Mongoose connection error:', err);
+  dbConnectionState.isConnected = false;
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('🟡 Mongoose disconnected from MongoDB');
+  dbConnectionState.isConnected = false;
+  // Attempt to reconnect
+  setTimeout(connectDB, 5000);
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('🔄 Mongoose reconnected to MongoDB');
+  dbConnectionState.isConnected = true;
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  try {
+    await mongoose.connection.close();
+    console.log('🔌 MongoDB connection closed through app termination');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error closing MongoDB connection:', error);
+    process.exit(1);
+  }
+});
+
+// Initialize database connection
+connectDB();
 
 // User schema
 const userSchema = new mongoose.Schema({
@@ -40,38 +127,107 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema);
 
-// Health check route
+// Database status helper
+const getDatabaseStatus = () => {
+  const state = mongoose.connection.readyState;
+  const statusMap = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+  return statusMap[state] || 'unknown';
+};
+
+// Health check route with detailed database status
 app.get("/health", (req, res) => {
+  const dbStatus = getDatabaseStatus();
+  const dbConnected = dbStatus === 'connected';
+  
   res.json({
     success: true,
     message: "Server is healthy",
     data: {
       status: "OK",
-      database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+      database: dbStatus,
+      databaseConnected: dbConnected,
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      connectionDetails: {
+        host: mongoose.connection.host || 'N/A',
+        name: mongoose.connection.name || 'N/A',
+        readyState: mongoose.connection.readyState
+      }
     }
   });
 });
 
 app.get("/api/health", (req, res) => {
+  const dbStatus = getDatabaseStatus();
+  const dbConnected = dbStatus === 'connected';
+  
   res.json({
     success: true,
     message: "Backend is healthy",
     data: {
       status: "OK",
-      database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+      database: dbStatus,
+      databaseConnected: dbConnected,
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      connectionDetails: {
+        host: mongoose.connection.host || 'N/A',
+        name: mongoose.connection.name || 'N/A',
+        readyState: mongoose.connection.readyState
+      }
     }
   });
 });
 
-// Auth routes
+// Database test route
+app.get("/api/test-db", async (req, res) => {
+  try {
+    // Test database connection with a simple operation
+    const userCount = await User.countDocuments();
+    const dbStatus = getDatabaseStatus();
+    
+    res.json({
+      success: true,
+      message: "Database test successful",
+      data: {
+        databaseStatus: dbStatus,
+        userCount: userCount,
+        connectionDetails: {
+          host: mongoose.connection.host,
+          name: mongoose.connection.name,
+          readyState: mongoose.connection.readyState
+        },
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Database test error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Database test failed",
+      error: error.message
+    });
+  }
+});
+
+// Auth routes with database error handling
 app.post("/api/auth/signup", async (req, res) => {
   try {
+    const dbStatus = getDatabaseStatus();
+    if (dbStatus !== 'connected') {
+      return res.status(503).json({
+        success: false,
+        message: "Database is not connected. Please try again later."
+      });
+    }
+
     const { email, password } = req.body;
     
     if (!email || !password) {
@@ -102,6 +258,12 @@ app.post("/api/auth/signup", async (req, res) => {
     });
   } catch (error) {
     console.error('Signup error:', error);
+    if (error.name === 'MongoTimeoutError' || error.name === 'MongoNetworkError') {
+      return res.status(503).json({
+        success: false,
+        message: "Database connection error. Please try again."
+      });
+    }
     res.status(500).json({
       success: false,
       message: "Server error"
@@ -111,6 +273,14 @@ app.post("/api/auth/signup", async (req, res) => {
 
 app.post("/api/auth/login", async (req, res) => {
   try {
+    const dbStatus = getDatabaseStatus();
+    if (dbStatus !== 'connected') {
+      return res.status(503).json({
+        success: false,
+        message: "Database is not connected. Please try again later."
+      });
+    }
+
     const { email, password } = req.body;
     
     if (!email || !password) {
@@ -145,6 +315,12 @@ app.post("/api/auth/login", async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
+    if (error.name === 'MongoTimeoutError' || error.name === 'MongoNetworkError') {
+      return res.status(503).json({
+        success: false,
+        message: "Database connection error. Please try again."
+      });
+    }
     res.status(500).json({
       success: false,
       message: "Server error"
@@ -155,6 +331,14 @@ app.post("/api/auth/login", async (req, res) => {
 // Profile route
 app.get("/api/auth/profile", async (req, res) => {
   try {
+    const dbStatus = getDatabaseStatus();
+    if (dbStatus !== 'connected') {
+      return res.status(503).json({
+        success: false,
+        message: "Database is not connected. Please try again later."
+      });
+    }
+
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) {
       return res.status(401).json({
@@ -180,6 +364,12 @@ app.get("/api/auth/profile", async (req, res) => {
     });
   } catch (error) {
     console.error('Profile error:', error);
+    if (error.name === 'MongoTimeoutError' || error.name === 'MongoNetworkError') {
+      return res.status(503).json({
+        success: false,
+        message: "Database connection error. Please try again."
+      });
+    }
     res.status(401).json({
       success: false,
       message: "Invalid token"
@@ -189,13 +379,15 @@ app.get("/api/auth/profile", async (req, res) => {
 
 // Root route
 app.get("/", (req, res) => {
+  const dbStatus = getDatabaseStatus();
   res.json({
     success: true,
     message: "SkillVouch AI Backend API",
     data: {
       version: "1.0.0",
       status: "running",
-      endpoints: ["/health", "/api/health", "/api/auth/signup", "/api/auth/login", "/api/auth/profile"]
+      database: dbStatus,
+      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile"]
     }
   });
 });
@@ -221,8 +413,9 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Database: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.log(`🔗 Database: ${getDatabaseStatus()}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+  console.log(`🧪 Database test: http://localhost:${PORT}/api/test-db`);
 });
 
 export default app;
