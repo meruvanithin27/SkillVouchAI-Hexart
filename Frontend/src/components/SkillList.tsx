@@ -19,6 +19,16 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
   const [suggestions, setSuggestions] = useState<{skills: string[], recommendations?: Record<string, string>, categories?: Record<string, string>}>({skills: []});
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
+  // Prevent rendering before user data is available
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        <span className="ml-3 text-slate-600 dark:text-slate-400">Loading user data...</span>
+      </div>
+    );
+  }
+
   const fetchSuggestions = async () => {
     if ((!user.skillsKnown || user.skillsKnown.length === 0) && (!user.skillsToLearn || user.skillsToLearn.length === 0)) return;
     
@@ -48,6 +58,15 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
       // Then fetch fresh data from backend to ensure consistency
       try {
         const freshUserData = await apiService.getProfile();
+        
+        // API Response Validation
+        if (!freshUserData || typeof freshUserData !== 'object') {
+          throw new Error('Invalid profile response: response is not an object');
+        }
+        
+        if (!freshUserData.id || !freshUserData.email) {
+          throw new Error('Invalid profile response: missing required user fields');
+        }
         
         // Update local state and storage with fresh data
         onUpdateUser(freshUserData);
@@ -244,22 +263,26 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
               )
             ) : (
               <div className="grid md:grid-cols-2 gap-4">
-                {user.skillsToLearn.map((skill, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-blue-100 dark:bg-blue-500/20 p-2 rounded text-blue-600 dark:text-blue-400">
-                        <BookOpen className="w-5 h-5" />
+                {(user.skillsToLearn || []).length === 0 ? (
+                  <div className="col-span-full text-center py-10 text-slate-500 dark:text-slate-400">No skills to learn added yet.</div>
+                ) : (
+                  (user.skillsToLearn || []).map((skill, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-blue-100 dark:bg-blue-500/20 p-2 rounded text-blue-600 dark:text-blue-400">
+                          <BookOpen className="w-5 h-5" />
+                        </div>
+                        <span className="font-medium text-slate-900 dark:text-slate-100">{skill}</span>
                       </div>
-                      <span className="font-medium text-slate-900 dark:text-slate-100">{skill}</span>
+                      <button
+                        onClick={() => handleRemoveSkill(skill, false)}
+                        className="text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 p-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleRemoveSkill(skill, false)}
-                      className="text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 p-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -296,8 +319,8 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
                       <div className="flex items-center gap-3 mb-2">
                         <button
                           onClick={() => {
-                            if (!user.skillsToLearn.includes(skill)) {
-                              updateUserAndDB({ ...user, skillsToLearn: [...user.skillsToLearn, skill] });
+                            if (!(user.skillsToLearn || []).includes(skill)) {
+                              updateUserAndDB({ ...user, skillsToLearn: [...(user.skillsToLearn || []), skill] });
                               setSuggestions(prev => ({
                                 ...prev,
                                 skills: prev.skills.filter(s => s !== skill)

@@ -16,8 +16,8 @@ const userSchema = new mongoose.Schema({
   avatar: { type: String, required: true },
   bio: { type: String, default: '' },
   discordLink: { type: String },
-  skillsKnown: [skillSchema],
-  skillsToLearn: [skillSchema],
+  skillsKnown: { type: [skillSchema], default: [] },
+  skillsToLearn: { type: [skillSchema], default: [] },
   rating: { type: Number, default: 0 },
   learningHours: { type: Number, default: 0 },
   weeklyActivity: { type: Number, default: 0 }
