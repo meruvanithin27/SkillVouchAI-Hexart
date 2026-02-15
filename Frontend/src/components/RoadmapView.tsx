@@ -45,7 +45,7 @@ export const RoadmapView: React.FC = () => {
     setLoading(true);
     setRoadmapData(null);
     try {
-      const response = await fetch('/api/learning/roadmap', {
+      const response = await fetch('/api/roadmap/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -53,7 +53,7 @@ export const RoadmapView: React.FC = () => {
         body: JSON.stringify({
           skill: skillInput,
           currentLevel: 'beginner',
-          goals: []
+          targetLevel: 'advanced'
         })
       });
 
@@ -62,9 +62,41 @@ export const RoadmapView: React.FC = () => {
       }
 
       const data = await response.json();
-      setRoadmapData(data);
+      
+      // Handle different response formats
+      if (data.success && data.data) {
+        // Backend format with data wrapper
+        const roadmapData = data.data;
+        setRoadmapData({
+          skill: roadmapData.skillName || skillInput,
+          level: 'Beginner to Advanced',
+          duration: '8-12 weeks',
+          roadmap: (roadmapData.steps || []).map((step: any, index: number) => ({
+            step: index + 1,
+            title: step.title || `Step ${index + 1}`,
+            description: step.description || '',
+            duration: step.duration || '1-2 weeks',
+            topics: step.topics || [],
+            resources: (step.resources || []).map((res: string) => ({
+              type: 'documentation' as const,
+              title: res,
+              url: '#'
+            })),
+            projects: step.projects || []
+          }))
+        });
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (error) {
       console.error('Error generating roadmap:', error);
+      // Show user-friendly error
+      setRoadmapData({
+        skill: skillInput,
+        level: 'Error',
+        duration: 'N/A',
+        roadmap: []
+      });
     } finally {
       setLoading(false);
     }
