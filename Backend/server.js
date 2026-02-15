@@ -1,3 +1,12 @@
+/**
+ * @fileoverview SkillVouch AI Backend Server
+ * @type {module} - This is a JavaScript ES6 module file
+ * @description Backend API server for SkillVouch AI platform
+ * @note This file is JavaScript, not TypeScript, despite IDE linting
+ * @ignore-ts-lint - Ignore TypeScript linting for this file
+ */
+
+// @ts-nocheck - Disable TypeScript checking for this file
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
