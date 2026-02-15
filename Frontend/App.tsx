@@ -3,9 +3,30 @@ import { Layout } from './src/components/Layout';
 import { View, User } from './src/types';
 import { INITIAL_USER } from './src/constants';
 import { dbService } from './src/services/dbService';
-import { Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2, WifiOff } from 'lucide-react';
 import { Logo } from './src/components/Logo';
 import { ChatBot } from './src/components/ChatBot';
+
+// Fallback component for when API is not available
+const ApiErrorFallback = () => (
+  <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+    <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 max-w-md w-full">
+      <div className="text-center">
+        <WifiOff className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
+        <h2 className="text-white text-xl font-semibold mb-2">API Connection Error</h2>
+        <p className="text-slate-400 mb-4">
+          Unable to connect to the server. Please check your internet connection and try again.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          Retry Connection
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 const Dashboard = lazy(() => import('./src/components/Dashboard').then(module => ({ default: module.Dashboard })));
 const SkillList = lazy(() => import('./src/components/SkillList').then(module => ({ default: module.SkillList })));
@@ -64,25 +85,32 @@ export default function App() {
   // Session Check Logic
   useEffect(() => {
     const checkSession = async () => {
+      try {
         const sessionUser = dbService.getCurrentSession();
         if (sessionUser) {
-            // Validate against DB to get fresh data
-            const freshUser = await dbService.getUserById(sessionUser.id);
-            if (freshUser) {
-                setUser(freshUser);
-                if (currentView === View.LANDING || currentView === View.LOGIN || currentView === View.SIGNUP) {
-                    setCurrentView(View.DASHBOARD);
-                }
-            } else {
-                // Session invalid (user deleted?)
-                dbService.logout();
-                setUser(INITIAL_USER);
-            }
+          setUser(sessionUser);
+          setCurrentView(View.DASHBOARD);
+          
+          // Check unread messages
+          try {
+            const count = await dbService.getUnreadCount(sessionUser.id);
+            setUnreadCount(count);
+          } catch (error) {
+            console.warn('Failed to check unread messages:', error);
+          }
+        } else {
+          setUser(INITIAL_USER);
         }
+      } catch (error) {
+        console.error('Session check failed:', error);
+        setUser(INITIAL_USER);
+      } finally {
         setLoadingSession(false);
+      }
     };
+    
     checkSession();
-  }, [currentView]);
+  }, []);
 
   // Poll for unread messages count
   useEffect(() => {

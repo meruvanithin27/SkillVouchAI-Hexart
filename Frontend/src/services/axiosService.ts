@@ -1,8 +1,20 @@
 import axios from 'axios';
 
+// Get API URL with fallback
+const getApiUrl = () => {
+  const url = import.meta.env.VITE_API_URL;
+  if (!url) {
+    console.error('❌ VITE_API_URL is not defined!');
+    console.error('Please set VITE_API_URL in your environment variables');
+    // Return a fallback URL that will show a clear error
+    return 'https://api-url-not-configured.error';
+  }
+  return url;
+};
+
 // Create axios instance with base configuration
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  baseURL: getApiUrl(),
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',

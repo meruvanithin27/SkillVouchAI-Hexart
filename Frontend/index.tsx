@@ -1,6 +1,17 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import ErrorBoundary from './src/components/ErrorBoundary';
+
+// Environment validation
+console.log('🔍 Environment Check:');
+console.log('VITE_API_URL:', import.meta.env.VITE_API_URL);
+console.log('NODE_ENV:', import.meta.env.NODE_ENV || 'development');
+
+if (!import.meta.env.VITE_API_URL) {
+  console.error('❌ VITE_API_URL is not defined!');
+  console.error('Please set VITE_API_URL in your environment variables');
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -10,6 +21,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
