@@ -22,7 +22,6 @@ export default defineConfig(({ mode }) => {
         }
       },
       build: {
-        cssCodeSplit: false,
         rollupOptions: {
           output: {
             manualChunks: {
