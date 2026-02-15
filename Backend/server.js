@@ -256,7 +256,14 @@ const userSchema = new mongoose.Schema({
   languages: [{ type: String }],
   preferredLanguage: { type: String, default: 'English' },
   availability: [{ type: String }],
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+// Add pre-save middleware to update updatedAt
+userSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
 });
 
 // Quiz Result Schema
@@ -309,15 +316,28 @@ const roadmapSchema = new mongoose.Schema({
   generatedAt: { type: Date, default: Date.now }
 });
 
-// Create indexes for performance (remove duplicate email index)
+// Create comprehensive indexes for performance
+userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ 'knownSkills.skillName': 1 });
 userSchema.index({ 'skillsToLearn.skillName': 1 });
+userSchema.index({ rating: -1 });
+userSchema.index({ createdAt: -1 });
 
 quizResultSchema.index({ userId: 1, skillName: 1 }, { unique: true });
+quizResultSchema.index({ userId: 1, completedAt: -1 });
+quizResultSchema.index({ skillName: 1, score: -1 });
+
 exchangeSchema.index({ requesterId: 1, receiverId: 1 });
-messageSchema.index({ senderId: 1, receiverId: 1 });
+exchangeSchema.index({ requesterId: 1, status: 1 });
+exchangeSchema.index({ receiverId: 1, status: 1 });
+exchangeSchema.index({ createdAt: -1 });
+
+messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
 messageSchema.index({ receiverId: 1, isRead: 1 });
+messageSchema.index({ receiverId: 1, createdAt: -1 });
+
 roadmapSchema.index({ userId: 1, skillName: 1 }, { unique: true });
+roadmapSchema.index({ userId: 1, generatedAt: -1 });
 
 const User = mongoose.model("User", userSchema);
 const QuizResult = mongoose.model("QuizResult", quizResultSchema);
@@ -1019,7 +1039,7 @@ app.get('/api/quiz', protect, async (req, res) => {
 });
 
 // Quiz generation endpoint - 100% Dynamic AI-based
-app.post('/quiz/generate', protect, async (req, res) => {
+app.post('/api/quiz/generate', protect, async (req, res) => {
   try {
     const dbStatus = getDatabaseStatus();
     if (dbStatus !== 'connected') {
@@ -1755,23 +1775,75 @@ app.get('/api/requests', protect, async (req, res) => {
 app.put('/api/requests/:id/status', protect, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, rating, feedbackComment } = req.body;
     const userId = req.user._id;
     
     console.log(`[API] PUT /api/requests/${id}/status - User: ${userId} - Status: ${status}`);
     
-    const exchange = await Exchange.findByIdAndUpdate(
-      id,
-      { status, updatedAt: new Date() },
-      { new: true }
-    );
+    // Validate status transitions
+    const validStatuses = ['Pending', 'Accepted', 'Rejected', 'Completed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status"
+      });
+    }
 
+    const exchange = await Exchange.findById(id);
     if (!exchange) {
       console.log(`[API] PUT /api/requests/${id}/status - User: ${userId} - 404 NOT FOUND`);
       return res.status(404).json({
         success: false,
         message: "Exchange request not found"
       });
+    }
+
+    // Verify user is part of the exchange
+    if (exchange.requesterId.toString() !== userId.toString() && 
+        exchange.receiverId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to update this exchange"
+      });
+    }
+
+    // Handle completion with rating
+    if (status === 'Completed') {
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({
+          success: false,
+          message: "Rating (1-5) is required when completing an exchange"
+        });
+      }
+
+      // Update exchange with completion data
+      exchange.status = status;
+      exchange.ratingGiven = rating;
+      exchange.feedbackComment = feedbackComment || '';
+      exchange.completedAt = new Date();
+      
+      await exchange.save();
+
+      // Update the other user's rating average
+      const otherUserId = exchange.requesterId.toString() === userId.toString() 
+        ? exchange.receiverId 
+        : exchange.requesterId;
+
+      const otherUser = await User.findById(otherUserId);
+      if (otherUser) {
+        const newTotalReviews = otherUser.totalReviews + 1;
+        const newRating = ((otherUser.rating * otherUser.totalReviews) + rating) / newTotalReviews;
+        
+        otherUser.rating = Math.round(newRating * 10) / 10; // Round to 1 decimal
+        otherUser.totalReviews = newTotalReviews;
+        await otherUser.save();
+
+        console.log(`[DB] Updated user rating - User: ${otherUserId} - New Rating: ${otherUser.rating} (${newTotalReviews} reviews)`);
+      }
+    } else {
+      // Handle other status updates
+      exchange.status = status;
+      await exchange.save();
     }
 
     console.log(`[API] PUT /api/requests/${id}/status - User: ${userId} - 200 OK`);
@@ -1933,17 +2005,93 @@ app.post('/api/peer-recommendations', protect, async (req, res) => {
     
     console.log(`[API] POST /api/peer-recommendations - User: ${userId}`);
     
-    // Simple recommendation logic - can be enhanced with AI
-    const users = await User.find({
-      _id: { $ne: userId },
-      'knownSkills.skillName': { $in: skills }
-    }).select('name email avatar knownSkills rating').limit(10);
+    // Get current user's skills and preferences
+    const currentUser = await User.findById(userId);
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
 
-    console.log(`[API] POST /api/peer-recommendations - User: ${userId} - 200 OK (${users.length} recommendations)`);
+    // Find all other users
+    const allUsers = await User.find({
+      _id: { $ne: userId }
+    }).select('name email avatar knownSkills skillsToLearn rating totalReviews');
+
+    // Calculate matching scores for each user
+    const scoredUsers = allUsers.map(user => {
+      let score = 0;
+      let reasoning = [];
+
+      // Skill Complementarity (60 points): User can teach what I want to learn
+      const userCanTeach = user.knownSkills.filter(skill => 
+        currentUser.skillsToLearn.some(learn => 
+          learn.skillName.toLowerCase() === skill.skillName.toLowerCase()
+        )
+      );
+      
+      // I can teach what user wants to learn (Reciprocity)
+      const iCanTeach = currentUser.knownSkills.filter(skill => 
+        user.skillsToLearn.some(learn => 
+          learn.skillName.toLowerCase() === skill.skillName.toLowerCase()
+        )
+      );
+
+      // Skill Complementarity Score (60 points max)
+      const complementarityScore = Math.min(userCanTeach.length * 20, 60);
+      score += complementarityScore;
+      if (userCanTeach.length > 0) {
+        reasoning.push(`${userCanTeach.length} skills you want to learn`);
+      }
+
+      // Reciprocity Score (30 points max)
+      const reciprocityScore = Math.min(iCanTeach.length * 15, 30);
+      score += reciprocityScore;
+      if (iCanTeach.length > 0) {
+        reasoning.push(`${iCanTeach.length} skills you can teach`);
+      }
+
+      // Rating Bonus (10 points max)
+      const ratingBonus = Math.min(user.rating * 2, 10);
+      score += ratingBonus;
+      reasoning.push(`Rating: ${user.rating}/5`);
+
+      // Determine compatibility level
+      let compatibilityLevel = 'Low';
+      if (score >= 80) compatibilityLevel = 'Excellent';
+      else if (score >= 60) compatibilityLevel = 'High';
+      else if (score >= 40) compatibilityLevel = 'Medium';
+
+      return {
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          avatar: user.avatar,
+          knownSkills: user.knownSkills,
+          rating: user.rating,
+          totalReviews: user.totalReviews
+        },
+        score,
+        reasoning: reasoning.join(', '),
+        compatibilityLevel,
+        userCanTeach: userCanTeach.map(s => s.skillName),
+        iCanTeach: iCanTeach.map(s => s.skillName)
+      };
+    });
+
+    // Filter and sort by score
+    const filteredUsers = scoredUsers
+      .filter(match => match.score > 0) // Only show users with some compatibility
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10); // Top 10 recommendations
+
+    console.log(`[API] POST /api/peer-recommendations - User: ${userId} - 200 OK (${filteredUsers.length} recommendations)`);
     
     res.json({
       success: true,
-      data: users
+      data: filteredUsers
     });
   } catch (error) {
     console.error(`[API] POST /api/peer-recommendations - User: ${req.user._id} - 500 ERROR:`, error);
@@ -1986,22 +2134,63 @@ app.post('/api/skills/suggest', protect, async (req, res) => {
 // Roadmap Generation
 app.post('/api/roadmap/generate', protect, async (req, res) => {
   try {
-    const { skill, currentLevel, targetLevel } = req.body;
+    const { skill, currentLevel = 'Beginner', targetLevel = 'Advanced' } = req.body;
     const userId = req.user._id;
     
     console.log(`[API] POST /api/roadmap/generate - User: ${userId} - Skill: ${skill}`);
     
-    // Simple roadmap - can be enhanced with AI
-    const roadmap = {
-      skill,
-      steps: [
-        { title: `Learn ${skill} basics`, duration: '2-4 weeks' },
-        { title: `Practice ${skill} projects`, duration: '4-6 weeks' },
-        { title: `Advanced ${skill} concepts`, duration: '6-8 weeks' }
-      ]
-    };
+    if (!skill || typeof skill !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: "Skill name is required"
+      });
+    }
 
-    console.log(`[API] POST /api/roadmap/generate - User: ${userId} - 200 OK`);
+    // Check if roadmap already exists for this user-skill pair
+    const existingRoadmap = await Roadmap.findOne({ userId, skillName: skill });
+    if (existingRoadmap) {
+      console.log(`[API] POST /api/roadmap/generate - User: ${userId} - Returning existing roadmap`);
+      return res.json({
+        success: true,
+        data: existingRoadmap,
+        message: "Roadmap already exists"
+      });
+    }
+
+    // Generate AI-powered roadmap
+    const roadmapSteps = await generateAIRoadmap(skill, currentLevel, targetLevel);
+    
+    if (!roadmapSteps || roadmapSteps.length === 0) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate roadmap steps"
+      });
+    }
+
+    // Store roadmap permanently
+    const roadmap = new Roadmap({
+      userId,
+      skillName: skill,
+      steps: roadmapSteps,
+      generatedAt: new Date()
+    });
+
+    await roadmap.save();
+
+    // Update user's skillsToLearn with roadmapId
+    await User.findOneAndUpdate(
+      { 
+        _id: userId,
+        'skillsToLearn.skillName': skill
+      },
+      { 
+        $set: { 
+          'skillsToLearn.$.roadmapId': roadmap._id.toString()
+        }
+      }
+    );
+
+    console.log(`[API] POST /api/roadmap/generate - User: ${userId} - 200 OK (Stored: ${roadmap._id})`);
     
     res.json({
       success: true,
@@ -2012,6 +2201,245 @@ app.post('/api/roadmap/generate', protect, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to generate roadmap"
+    });
+  }
+});
+
+// AI-powered roadmap generation
+async function generateAIRoadmap(skill, currentLevel, targetLevel) {
+  const mistralApiKey = process.env.MISTRAL_API_KEY;
+  if (!mistralApiKey) {
+    // Fallback to simple roadmap if AI not available
+    return [
+      {
+        title: `Learn ${skill} fundamentals`,
+        description: `Master the basic concepts and syntax of ${skill}`,
+        duration: '2-4 weeks',
+        resources: ['Official documentation', 'Online tutorials', 'Practice exercises']
+      },
+      {
+        title: `Build ${skill} projects`,
+        description: `Apply your knowledge by building practical projects`,
+        duration: '4-6 weeks',
+        resources: ['Project ideas', 'Code examples', 'Community forums']
+      },
+      {
+        title: `Advanced ${skill} techniques`,
+        description: `Learn advanced concepts and best practices`,
+        duration: '6-8 weeks',
+        resources: ['Advanced tutorials', 'Expert articles', 'Open source contributions']
+      }
+    ];
+  }
+
+  try {
+    const prompt = `Generate a 5-step learning roadmap for ${skill} from ${currentLevel} to ${targetLevel} level.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "steps": [
+    {
+      "title": "string",
+      "description": "string", 
+      "duration": "string",
+      "resources": ["string", "string", "string"]
+    }
+  ]
+}
+
+Requirements:
+- Exactly 5 steps
+- Each step must have a clear title and detailed description
+- Duration should be realistic (e.g., "2-3 weeks")
+- Include 3 relevant learning resources per step
+- Progress from basic to advanced concepts`;
+
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mistralApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'mistral-tiny',
+        messages: [
+          {
+            role: 'system',
+            content: 'You MUST return ONLY valid JSON. No explanations, no markdown, just JSON.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 1500
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI API request failed: ${response.status}`);
+    }
+
+    const rawResponse = await response.text();
+    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+    
+    if (!jsonMatch) {
+      throw new Error('No JSON found in AI response');
+    }
+
+    const jsonResponse = JSON.parse(jsonMatch[0]);
+    
+    if (!jsonResponse.steps || !Array.isArray(jsonResponse.steps) || jsonResponse.steps.length !== 5) {
+      throw new Error('Invalid roadmap structure from AI');
+    }
+
+    return jsonResponse.steps;
+  } catch (error) {
+    console.error('AI roadmap generation failed:', error);
+    throw error;
+  }
+}
+
+// Dashboard Analytics - Computed from Database
+app.get('/api/analytics/dashboard', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    console.log(`[API] GET /api/analytics/dashboard - User: ${userId}`);
+    
+    // Get user data
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Compute profile completion percentage
+    let profileFields = 0;
+    let completedFields = 0;
+    
+    // Required fields
+    profileFields += 3; // name, email, password (always present)
+    completedFields += 3;
+    
+    // Optional fields
+    if (user.avatar && user.avatar.trim()) { completedFields++; }
+    if (user.bio && user.bio.trim()) { completedFields++; }
+    if (user.discordLink && user.discordLink.trim()) { completedFields++; }
+    if (user.languages && user.languages.length > 0) { completedFields++; }
+    if (user.availability && user.availability.length > 0) { completedFields++; }
+    profileFields += 5;
+
+    const profileCompletion = Math.round((completedFields / profileFields) * 100);
+
+    // Get verified skills count
+    const verifiedSkillsCount = user.knownSkills.filter(skill => 
+      skill.verificationStatus === 'Verified'
+    ).length;
+
+    // Get total exchanges count
+    const totalExchanges = await Exchange.countDocuments({
+      $or: [
+        { requesterId: userId },
+        { receiverId: userId }
+      ]
+    });
+
+    // Get completed exchanges count
+    const completedExchanges = await Exchange.countDocuments({
+      $or: [
+        { requesterId: userId },
+        { receiverId: userId }
+      ],
+      status: 'Completed'
+    });
+
+    // Get quiz attempts count
+    const quizAttempts = await QuizResult.countDocuments({ userId });
+
+    // Get average quiz score
+    const quizResults = await QuizResult.find({ userId });
+    const averageQuizScore = quizResults.length > 0 
+      ? Math.round(quizResults.reduce((sum, result) => sum + result.score, 0) / quizResults.length)
+      : 0;
+
+    // Get unread messages count
+    const unreadMessages = await Message.countDocuments({
+      receiverId: userId,
+      isRead: false
+    });
+
+    // Get pending requests count
+    const pendingRequests = await Exchange.countDocuments({
+      receiverId: userId,
+      status: 'Pending'
+    });
+
+    // Get skills distribution
+    const skillsDistribution = {
+      known: user.knownSkills.length,
+      verified: verifiedSkillsCount,
+      learning: user.skillsToLearn.length
+    };
+
+    // Get recent activity
+    const recentQuizResults = await QuizResult.find({ userId })
+      .sort({ completedAt: -1 })
+      .limit(5)
+      .select('skillName score completedAt level');
+
+    const recentExchanges = await Exchange.find({
+      $or: [
+        { requesterId: userId },
+        { receiverId: userId }
+      ]
+    })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .populate('requesterId receiverId', 'name avatar');
+
+    const analytics = {
+      profile: {
+        completion: profileCompletion,
+        verifiedSkills: verifiedSkillsCount,
+        totalSkills: user.knownSkills.length,
+        averageRating: user.rating,
+        totalReviews: user.totalReviews
+      },
+      exchanges: {
+        total: totalExchanges,
+        completed: completedExchanges,
+        pending: pendingRequests,
+        completionRate: totalExchanges > 0 ? Math.round((completedExchanges / totalExchanges) * 100) : 0
+      },
+      quizzes: {
+        attempts: quizAttempts,
+        averageScore: averageQuizScore,
+        recentResults: recentQuizResults
+      },
+      messaging: {
+        unreadMessages: unreadMessages
+      },
+      skills: skillsDistribution,
+      recentActivity: {
+        quizzes: recentQuizResults,
+        exchanges: recentExchanges
+      }
+    };
+
+    console.log(`[API] GET /api/analytics/dashboard - User: ${userId} - 200 OK`);
+    
+    res.json({
+      success: true,
+      data: analytics
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/analytics/dashboard - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard analytics"
     });
   }
 });
@@ -2083,6 +2511,59 @@ app.post('/api/execute-sql', protect, async (req, res) => {
       message: "Failed to execute SQL"
     });
   }
+});
+
+// Centralized Error Handling Middleware
+app.use((error, req, res, next) => {
+  console.error(`[ERROR] ${req.method} ${req.originalUrl} - User: ${req.user?._id || 'Anonymous'} - Error: ${error.message}`);
+  
+  // Mongoose validation errors
+  if (error.name === 'ValidationError') {
+    const errors = Object.values(error.errors).map(err => err.message);
+    return res.status(400).json({
+      success: false,
+      message: "Validation failed",
+      errors
+    });
+  }
+  
+  // Mongoose duplicate key errors
+  if (error.code === 11000) {
+    const field = Object.keys(error.keyPattern)[0];
+    return res.status(409).json({
+      success: false,
+      message: `${field} already exists`
+    });
+  }
+  
+  // JWT errors
+  if (error.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid token"
+    });
+  }
+  
+  if (error.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      message: "Token expired"
+    });
+  }
+  
+  // Database connection errors
+  if (error.name === 'MongoTimeoutError' || error.name === 'MongoNetworkError') {
+    return res.status(503).json({
+      success: false,
+      message: "Database connection error. Please try again later."
+    });
+  }
+  
+  // Default error
+  res.status(error.status || 500).json({
+    success: false,
+    message: error.message || "Internal server error"
+  });
 });
 
 // 404 handler
