@@ -125,5 +125,9 @@ export const dbService = {
 
   getConversations: async (): Promise<User[]> => {
     return apiService.getConversations();
+  },
+
+  getMessages: async (userId: string, otherUserId: string): Promise<Message[]> => {
+    return apiService.getConversation(userId, otherUserId);
   }
 };
