@@ -1321,11 +1321,738 @@ app.use((err, req, res, next) => {
   });
 });
 
+// ==================== MESSAGING SYSTEM ====================
+
+// Get all conversations for a user
+app.get('/api/messages/conversations', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    console.log(`[API] GET /api/messages/conversations - User: ${userId}`);
+    
+    const conversations = await Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { senderId: new mongoose.Types.ObjectId(userId) },
+            { receiverId: new mongoose.Types.ObjectId(userId) }
+          ]
+        }
+      },
+      {
+        $sort: { createdAt: -1 }
+      },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ['$senderId', new mongoose.Types.ObjectId(userId)] },
+              '$receiverId',
+              '$senderId'
+            ]
+          },
+          lastMessage: { $first: '$$ROOT' },
+          unreadCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$receiverId', new mongoose.Types.ObjectId(userId)] },
+                    { $eq: ['$isRead', false] }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'otherUser'
+        }
+      },
+      {
+        $unwind: '$otherUser'
+      }
+    ]);
+
+    console.log(`[API] GET /api/messages/conversations - User: ${userId} - 200 OK (${conversations.length} conversations)`);
+    
+    res.json({
+      success: true,
+      data: conversations
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/messages/conversations - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch conversations"
+    });
+  }
+});
+
+// Get conversation between two users
+app.get('/api/messages/conversation', protect, async (req, res) => {
+  try {
+    const { user1Id, user2Id } = req.query;
+    const userId = req.user._id;
+    
+    console.log(`[API] GET /api/messages/conversation - User: ${userId} - With: ${user2Id}`);
+    
+    // Verify user is part of the conversation
+    if (userId !== user1Id && userId !== user2Id) {
+      console.log(`[API] GET /api/messages/conversation - User: ${userId} - 403 FORBIDDEN`);
+      return res.status(403).json({
+        success: false,
+        message: "Access denied"
+      });
+    }
+    
+    const messages = await Message.find({
+      $or: [
+        { senderId: user1Id, receiverId: user2Id },
+        { senderId: user2Id, receiverId: user1Id }
+      ]
+    }).sort({ createdAt: 1 });
+
+    console.log(`[API] GET /api/messages/conversation - User: ${userId} - 200 OK (${messages.length} messages)`);
+    
+    res.json({
+      success: true,
+      data: messages
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/messages/conversation - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch conversation"
+    });
+  }
+});
+
+// Send a message
+app.post('/api/messages/send', protect, async (req, res) => {
+  try {
+    const { receiverId, content } = req.body;
+    const senderId = req.user._id;
+    
+    console.log(`[API] POST /api/messages/send - User: ${senderId} - To: ${receiverId}`);
+    
+    const message = new Message({
+      senderId,
+      receiverId,
+      content,
+      createdAt: new Date()
+    });
+    
+    await message.save();
+    
+    console.log(`[API] POST /api/messages/send - User: ${senderId} - 201 OK`);
+    
+    res.status(201).json({
+      success: true,
+      data: message
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/messages/send - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send message"
+    });
+  }
+});
+
+// Legacy route for compatibility
+app.post('/api/messages', protect, async (req, res) => {
+  try {
+    const { receiverId, content } = req.body;
+    const senderId = req.user._id;
+    
+    console.log(`[API] POST /api/messages - User: ${senderId} - To: ${receiverId}`);
+    
+    const message = new Message({
+      senderId,
+      receiverId,
+      content,
+      createdAt: new Date()
+    });
+    
+    await message.save();
+    
+    console.log(`[API] POST /api/messages - User: ${senderId} - 201 OK`);
+    
+    res.status(201).json({
+      success: true,
+      data: message
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/messages - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send message"
+    });
+  }
+});
+
+// Get unread message count
+app.get('/api/messages/unread-count', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    console.log(`[API] GET /api/messages/unread-count - User: ${userId}`);
+    
+    const unreadCount = await Message.countDocuments({
+      receiverId: userId,
+      isRead: false
+    });
+
+    console.log(`[API] GET /api/messages/unread-count - User: ${userId} - 200 OK (${unreadCount} unread)`);
+    
+    res.json({
+      success: true,
+      data: { unreadCount }
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/messages/unread-count - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get unread count"
+    });
+  }
+});
+
+// Mark messages as read
+app.post('/api/messages/mark-as-read', protect, async (req, res) => {
+  try {
+    const { senderId } = req.body;
+    const userId = req.user._id;
+    
+    console.log(`[API] POST /api/messages/mark-as-read - User: ${userId} - From: ${senderId}`);
+    
+    await Message.updateMany(
+      {
+        senderId,
+        receiverId: userId,
+        isRead: false
+      },
+      { isRead: true }
+    );
+
+    console.log(`[API] POST /api/messages/mark-as-read - User: ${userId} - 200 OK`);
+    
+    res.json({
+      success: true,
+      message: "Messages marked as read"
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/messages/mark-as-read - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to mark messages as read"
+    });
+  }
+});
+
+// Get conversations (alias for consistency)
+app.get('/api/conversations', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    console.log(`[API] GET /api/conversations - User: ${userId}`);
+    
+    const conversations = await Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { senderId: new mongoose.Types.ObjectId(userId) },
+            { receiverId: new mongoose.Types.ObjectId(userId) }
+          ]
+        }
+      },
+      {
+        $sort: { createdAt: -1 }
+      },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ['$senderId', new mongoose.Types.ObjectId(userId)] },
+              '$receiverId',
+              '$senderId'
+            ]
+          },
+          lastMessage: { $first: '$$ROOT' },
+          unreadCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$receiverId', new mongoose.Types.ObjectId(userId)] },
+                    { $eq: ['$isRead', false] }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'otherUser'
+        }
+      },
+      {
+        $unwind: '$otherUser'
+      }
+    ]);
+
+    console.log(`[API] GET /api/conversations - User: ${userId} - 200 OK (${conversations.length} conversations)`);
+    
+    res.json({
+      success: true,
+      data: conversations
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/conversations - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch conversations"
+    });
+  }
+});
+
+// Legacy route for compatibility
+app.get('/api/messages/:userId', protect, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user._id;
+    
+    console.log(`[API] GET /api/messages/${userId} - User: ${currentUserId}`);
+    
+    const messages = await Message.find({
+      $or: [
+        { senderId: currentUserId, receiverId: userId },
+        { senderId: userId, receiverId: currentUserId }
+      ]
+    }).sort({ createdAt: 1 });
+
+    console.log(`[API] GET /api/messages/${userId} - User: ${currentUserId} - 200 OK (${messages.length} messages)`);
+    
+    res.json({
+      success: true,
+      data: messages
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/messages/${userId} - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch messages"
+    });
+  }
+});
+
+// ==================== EXCHANGE SYSTEM ====================
+
+// Create exchange request
+app.post('/api/requests', protect, async (req, res) => {
+  try {
+    const exchangeData = req.body;
+    const requesterId = req.user._id;
+    
+    console.log(`[API] POST /api/requests - User: ${requesterId}`);
+    
+    const exchange = new Exchange({
+      ...exchangeData,
+      requesterId,
+      status: 'pending',
+      createdAt: new Date()
+    });
+    
+    await exchange.save();
+    
+    console.log(`[API] POST /api/requests - User: ${requesterId} - 201 OK`);
+    
+    res.status(201).json({
+      success: true,
+      data: exchange
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/requests - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create exchange request"
+    });
+  }
+});
+
+// Get exchange requests for user
+app.get('/api/requests', protect, async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const currentUserId = req.user._id;
+    
+    console.log(`[API] GET /api/requests - User: ${currentUserId}`);
+    
+    const requests = await Exchange.find({
+      $or: [
+        { requesterId: userId || currentUserId },
+        { receiverId: userId || currentUserId }
+      ]
+    }).populate('requesterId receiverId');
+
+    console.log(`[API] GET /api/requests - User: ${currentUserId} - 200 OK (${requests.length} requests)`);
+    
+    res.json({
+      success: true,
+      data: requests
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/requests - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch exchange requests"
+    });
+  }
+});
+
+// Update exchange request status
+app.put('/api/requests/:id/status', protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const userId = req.user._id;
+    
+    console.log(`[API] PUT /api/requests/${id}/status - User: ${userId} - Status: ${status}`);
+    
+    const exchange = await Exchange.findByIdAndUpdate(
+      id,
+      { status, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!exchange) {
+      console.log(`[API] PUT /api/requests/${id}/status - User: ${userId} - 404 NOT FOUND`);
+      return res.status(404).json({
+        success: false,
+        message: "Exchange request not found"
+      });
+    }
+
+    console.log(`[API] PUT /api/requests/${id}/status - User: ${userId} - 200 OK`);
+    
+    res.json({
+      success: true,
+      data: exchange
+    });
+  } catch (error) {
+    console.error(`[API] PUT /api/requests/${id}/status - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update exchange request"
+    });
+  }
+});
+
+// ==================== FEEDBACK SYSTEM ====================
+
+// Submit feedback
+app.post('/api/feedback', protect, async (req, res) => {
+  try {
+    const feedbackData = req.body;
+    const fromUserId = req.user._id;
+    
+    console.log(`[API] POST /api/feedback - User: ${fromUserId}`);
+    
+    const feedback = {
+      ...feedbackData,
+      fromUserId,
+      createdAt: new Date()
+    };
+    
+    // For now, store in exchange (can be extended to separate feedback collection)
+    await Exchange.findByIdAndUpdate(
+      feedbackData.exchangeId,
+      { $push: { feedback } }
+    );
+    
+    console.log(`[API] POST /api/feedback - User: ${fromUserId} - 201 OK`);
+    
+    res.status(201).json({
+      success: true,
+      data: feedback
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/feedback - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to submit feedback"
+    });
+  }
+});
+
+// Get received feedback
+app.get('/api/feedback/received', protect, async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const currentUserId = req.user._id;
+    
+    console.log(`[API] GET /api/feedback/received - User: ${currentUserId}`);
+    
+    const feedback = await Exchange.find({
+      receiverId: userId || currentUserId,
+      feedback: { $exists: true, $ne: [] }
+    }).select('feedback');
+
+    console.log(`[API] GET /api/feedback/received - User: ${currentUserId} - 200 OK`);
+    
+    res.json({
+      success: true,
+      data: feedback
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/feedback/received - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch feedback"
+    });
+  }
+});
+
+// Get feedback stats
+app.get('/api/feedback/stats', protect, async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const currentUserId = req.user._id;
+    
+    console.log(`[API] GET /api/feedback/stats - User: ${currentUserId}`);
+    
+    // Simple stats - can be enhanced
+    const stats = {
+      totalExchanges: 0,
+      completedExchanges: 0,
+      averageRating: 0
+    };
+    
+    console.log(`[API] GET /api/feedback/stats - User: ${currentUserId} - 200 OK`);
+    
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/feedback/stats - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch feedback stats"
+    });
+  }
+});
+
+// ==================== AI ENDPOINTS ====================
+
+// AI Quiz Generation (Mistral)
+app.post('/api/mistral/generate-quiz', protect, async (req, res) => {
+  try {
+    const { skill, difficulty, questionCount = 5 } = req.body;
+    const userId = req.user._id;
+    
+    console.log(`[AI] Quiz generation triggered - Skill: ${skill} - Difficulty: ${difficulty}`);
+    
+    const questions = await generateDynamicQuizQuestions(skill, difficulty, questionCount);
+    
+    console.log(`[AI] Model response parsed successfully - ${questions.length} questions generated`);
+    
+    res.json({
+      success: true,
+      data: {
+        skill,
+        difficulty,
+        questions
+      }
+    });
+  } catch (error) {
+    console.error(`[AI] Quiz generation failed - User: ${req.user._id} - ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate quiz"
+    });
+  }
+});
+
+// Peer Recommendations
+app.post('/api/peer-recommendations', protect, async (req, res) => {
+  try {
+    const { skills, preferences } = req.body;
+    const userId = req.user._id;
+    
+    console.log(`[API] POST /api/peer-recommendations - User: ${userId}`);
+    
+    // Simple recommendation logic - can be enhanced with AI
+    const users = await User.find({
+      _id: { $ne: userId },
+      'knownSkills.skillName': { $in: skills }
+    }).select('name email avatar knownSkills rating').limit(10);
+
+    console.log(`[API] POST /api/peer-recommendations - User: ${userId} - 200 OK (${users.length} recommendations)`);
+    
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/peer-recommendations - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get peer recommendations"
+    });
+  }
+});
+
+// Skill Suggestions
+app.post('/api/skills/suggest', protect, async (req, res) => {
+  try {
+    const { userSkills, preferences } = req.body;
+    const userId = req.user._id;
+    
+    console.log(`[API] POST /api/skills/suggest - User: ${userId}`);
+    
+    // Simple skill suggestions - can be enhanced with AI
+    const suggestions = [
+      'JavaScript', 'Python', 'React', 'Node.js', 'TypeScript',
+      'Docker', 'AWS', 'MongoDB', 'PostgreSQL', 'GraphQL'
+    ].filter(skill => !userSkills.includes(skill));
+
+    console.log(`[API] POST /api/skills/suggest - User: ${userId} - 200 OK (${suggestions.length} suggestions)`);
+    
+    res.json({
+      success: true,
+      data: { skills: suggestions }
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/skills/suggest - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get skill suggestions"
+    });
+  }
+});
+
+// Roadmap Generation
+app.post('/api/roadmap/generate', protect, async (req, res) => {
+  try {
+    const { skill, currentLevel, targetLevel } = req.body;
+    const userId = req.user._id;
+    
+    console.log(`[API] POST /api/roadmap/generate - User: ${userId} - Skill: ${skill}`);
+    
+    // Simple roadmap - can be enhanced with AI
+    const roadmap = {
+      skill,
+      steps: [
+        { title: `Learn ${skill} basics`, duration: '2-4 weeks' },
+        { title: `Practice ${skill} projects`, duration: '4-6 weeks' },
+        { title: `Advanced ${skill} concepts`, duration: '6-8 weeks' }
+      ]
+    };
+
+    console.log(`[API] POST /api/roadmap/generate - User: ${userId} - 200 OK`);
+    
+    res.json({
+      success: true,
+      data: roadmap
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/roadmap/generate - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate roadmap"
+    });
+  }
+});
+
+// Learning Roadmap
+app.get('/api/learning/roadmap', protect, async (req, res) => {
+  try {
+    const { skill } = req.query;
+    const userId = req.user._id;
+    
+    console.log(`[API] GET /api/learning/roadmap - User: ${userId} - Skill: ${skill}`);
+    
+    const roadmap = await Roadmap.findOne({ userId, skillName: skill });
+    
+    console.log(`[API] GET /api/learning/roadmap - User: ${userId} - 200 OK`);
+    
+    res.json({
+      success: true,
+      data: roadmap || { steps: [] }
+    });
+  } catch (error) {
+    console.error(`[API] GET /api/learning/roadmap - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch learning roadmap"
+    });
+  }
+});
+
+// AI SQL Query (placeholder)
+app.post('/api/ai-sql-query', protect, async (req, res) => {
+  try {
+    const { query } = req.body;
+    const userId = req.user._id;
+    
+    console.log(`[API] POST /api/ai-sql-query - User: ${userId}`);
+    
+    // Placeholder for AI SQL query generation
+    res.json({
+      success: true,
+      data: { sql: "SELECT * FROM users WHERE active = true" }
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/ai-sql-query - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate SQL query"
+    });
+  }
+});
+
+// Execute SQL (placeholder)
+app.post('/api/execute-sql', protect, async (req, res) => {
+  try {
+    const { sql } = req.body;
+    const userId = req.user._id;
+    
+    console.log(`[API] POST /api/execute-sql - User: ${userId}`);
+    
+    // Placeholder for SQL execution
+    res.json({
+      success: true,
+      data: { results: [], message: "SQL execution not implemented in production" }
+    });
+  } catch (error) {
+    console.error(`[API] POST /api/execute-sql - User: ${req.user._id} - 500 ERROR:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to execute SQL"
+    });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
+  console.log(`[API] ${req.method} ${req.originalUrl} - 404 NOT FOUND`);
   res.status(404).json({
     success: false,
-    message: "Route not found"
+    message: `Route ${req.originalUrl} not found`
   });
 });
 
