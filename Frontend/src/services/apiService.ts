@@ -298,6 +298,26 @@ export const apiService = {
     return result.count || 0;
   },
 
+  getConversations: async (): Promise<User[]> => {
+    try {
+      const response = await API.get('/api/conversations');
+      const data = response.data;
+      
+      // Ensure we return an array
+      if (Array.isArray(data)) {
+        return data;
+      } else if (data && Array.isArray(data.data)) {
+        return data.data;
+      } else {
+        console.warn('getConversations: Unexpected response format, returning empty array');
+        return [];
+      }
+    } catch (error) {
+      console.error('Failed to fetch conversations:', error);
+      return [];
+    }
+  },
+
   markAsRead: async (userId: string, senderId: string) => {
     const response = await API.post('/api/messages/mark-as-read', { userId, senderId });
     return response.data;

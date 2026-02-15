@@ -646,11 +646,15 @@ export const generateRoadmap = async (skillName: string): Promise<RoadmapItem[]>
 
 // 3. Suggest Skills with Mistral via backend API - Enhanced with detailed recommendations
 export const suggestSkills = async (currentSkills: string[], currentGoals: string[] = []): Promise<{skills: string[], recommendations?: Record<string, string>, categories?: Record<string, string>}> => {
+  // Ensure currentSkills is an array
+  const skillsArray = Array.isArray(currentSkills) ? currentSkills : [];
+  const goalsArray = Array.isArray(currentGoals) ? currentGoals : [];
+  
   try {
     const response = await fetch('/api/skills/suggest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ currentSkills, currentGoals })
+      body: JSON.stringify({ currentSkills: skillsArray, currentGoals: goalsArray })
     });
     if (!response.ok) throw new Error('Failed to suggest skills');
     const data = await response.json();
@@ -673,7 +677,7 @@ export const suggestSkills = async (currentSkills: string[], currentGoals: strin
     
     // Filter out skills user already knows and return 5 random ones
     const availableSkills = fallbackSkills.filter(skill => 
-      !currentSkills.some(known => known.toLowerCase() === skill.toLowerCase())
+      !skillsArray.some(known => known.toLowerCase() === skill.toLowerCase())
     );
     
     // Shuffle and take 5

@@ -18,320 +18,192 @@ export const MatchFinder: React.FC<MatchFinderProps> = ({ currentUser, onMessage
   const [strictMode, setStrictMode] = useState(false);
   const [strictMatches, setStrictMatches] = useState<User[]>([]);
 
-  // Enhanced keyword matching with flexible and strict modes
-  const calculateKeywordScore = (me: User, candidate: User, strictMode: boolean = false): number => {
+  // Simple base score calculation
+  const calculateBaseScore = (me: User, candidate: User): number => {
     let score = 0;
 
-    // Extract comprehensive keywords from user profile
-    const extractKeywords = (user: User): string[] => {
-      const keywords: string[] = [];
+    // Basic skill matching
+    const usefulSkills = candidate.skillsKnown.filter(s =>
+      me.skillsToLearn.some(want =>
+        typeof want === 'string'
+          ? want.toLowerCase() === s.name.toLowerCase()
+          : (want.skillName || '').toLowerCase() === s.name.toLowerCase()
+      )
+    );
 
-      // Bio keywords (split by common delimiters)
-      if (user.bio) {
-        const bioWords = user.bio.toLowerCase()
-          .split(/[\s,.;!?]+/)
-          .filter(word => word.length > 3)
-          .map(word => word.replace(/[^\w]/g, ''));
-        keywords.push(...bioWords);
-      }
+    score += usefulSkills.length * 25;
+    score += Math.min(25, candidate.rating * 5);
 
-      // Skills as keywords
-      const knownSkills = user.skillsKnown.map(s => s.name.toLowerCase());
-      const learnSkills = user.skillsToLearn.map((s: any) =>
-        typeof s === 'string' ? s.toLowerCase() : (s.skillName || '').toLowerCase()
-      );
-      keywords.push(...knownSkills, ...learnSkills);
-
-      // Languages and other profile data
-      if (user.languages) keywords.push(...user.languages.map(l => l.toLowerCase()));
-      if (user.preferredLanguage) keywords.push(user.preferredLanguage.toLowerCase());
-
-      // Remove duplicates and common words
-      const commonWords = new Set(['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her', 'was', 'one', 'our', 'had', 'but', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'who', 'boy', 'did', 'her', 'its', 'let', 'put', 'say', 'she', 'too', 'use']);
-      return [...new Set(keywords)].filter(word => !commonWords.has(word) && word.length > 2);
-    };
-
-    const myKeywords = extractKeywords(me);
-    const theirKeywords = extractKeywords(candidate);
-
-    if (strictMode) {
-      // Strict mode: Require exact keyword matches (case-insensitive)
-      const exactMatches = myKeywords.filter(myWord =>
-        theirKeywords.some(theirWord =>
-          theirWord === myWord || theirWord.includes(myWord) || myWord.includes(theirWord)
-        )
-      );
-      score = Math.min(30, exactMatches.length * 5); // Max 30 points for keyword matches in strict mode
-    } else {
-      // Flexible mode: Partial and fuzzy keyword matching
-      let totalMatches = 0;
-
-      myKeywords.forEach(myWord => {
-        // Exact match (highest weight)
-        if (theirKeywords.includes(myWord)) {
-          totalMatches += 3;
-        }
-        // Partial match (contains/includes)
-        else if (theirKeywords.some(word => word.includes(myWord) || myWord.includes(word))) {
-          totalMatches += 2;
-        }
-        // Fuzzy match (similar words)
-        else if (theirKeywords.some(word => {
-          // Simple Levenshtein distance approximation
-          const distance = Math.abs(word.length - myWord.length);
-          if (distance <= 1) {
-            let diffCount = 0;
-            for (let i = 0; i < Math.min(word.length, myWord.length); i++) {
-              if (word[i] !== myWord[i]) diffCount++;
-            }
-            return diffCount <= 2;
-          }
-          return false;
-        })) {
-          totalMatches += 1;
-        }
-      });
-
-      score = Math.min(25, totalMatches); // Max 25 points for flexible keyword matching
-    }
-
-    return score;
+    return Math.min(100, score);
   };
 
   const fetchMatches = async () => {
-    // 1. Get existing users
-    const allUsers = await dbService.getUsers();
+    setLoading(true);
+    try {
+      const allUsers = await dbService.getUsers();
+      const strictMentors = skillMatchingEngine.findStrictMentors(currentUser, allUsers);
+      setStrictMatches(strictMentors);
 
-    // 2. Find strict matches using the skill matching engine
-    const strictMentors = skillMatchingEngine.findStrictMentors(currentUser, allUsers);
-    setStrictMatches(strictMentors);
+      const candidates = allUsers.filter(user => user.id !== currentUser.id);
+      const filteredCandidates = strictMode ? strictMentors : candidates;
 
-    // 3. Analyze matches (Real users only)
-    const candidates = allUsers.filter(user => user.id !== currentUser.id);
+      const scoredCandidates = filteredCandidates
+        .map(user => ({
+          user,
+          baseScore: calculateBaseScore(currentUser, user)
+        }))
+        .sort((a, b) => b.baseScore - a.baseScore)
+        .slice(0, 6);
 
-    // If strict mode is enabled, only show strict matches
-    const filteredCandidates = strictMode ? strictMentors : candidates;
+      const results: MatchRecommendation[] = [];
 
-    // Pre-calculate base scores to sort candidates for API prioritization
-    const scoredCandidates = filteredCandidates.map(user => ({
-        user,
-        baseScore: calculateBaseScore(currentUser, user)
-    })).sort((a, b) => b.baseScore - a.baseScore).slice(0, 6); // Take top 6 for deep analysis
+      for (const item of scoredCandidates) {
+        try {
+          const analysis = await analyzeMatch(currentUser, item.user);
+          const finalScore = Math.round((item.baseScore * 0.4) + (analysis.score * 0.6));
 
-    const results: MatchRecommendation[] = [];
-
-    for (const item of scoredCandidates) {
-      try {
-        const analysis = await analyzeMatch(currentUser, item.user);
-        // Weighted Average: 40% Base Heuristic + 60% AI Insight
-        const finalScore = Math.round((item.baseScore * 0.4) + (analysis.score * 0.6));
-
-        results.push({
-          user: item.user,
-          matchScore: finalScore,
-          reasoning: analysis.reasoning,
-          commonInterests: analysis.commonInterests || []
-        });
-      } catch (e) {
-        console.error("Analysis failed for", item.user.name);
-        // Fallback to base score if AI fails
-        results.push({
-           user: item.user,
-           matchScore: item.baseScore,
-           reasoning: "High compatibility based on skill matching.",
-           commonInterests: []
-        });
+          results.push({
+            user: item.user,
+            matchScore: finalScore,
+            reasoning: analysis.reasoning,
+            commonInterests: analysis.commonInterests || []
+          });
+        } catch (e) {
+          console.error("Analysis failed for", item.user.name);
+          results.push({
+            user: item.user,
+            matchScore: item.baseScore,
+            reasoning: "High compatibility based on skill matching.",
+            commonInterests: []
+          });
+        }
       }
+
+      results.sort((a, b) => b.matchScore - a.matchScore);
+      setRecommendations(results);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    // Sort by final score
-    results.sort((a, b) => b.matchScore - a.matchScore);
-    setRecommendations(results);
-    setLoading(false);
   };
 
   useEffect(() => {
     if (currentUser.id !== 'temp') {
-        fetchMatches();
-        
-        // Poll for new users every 5 seconds
-        const interval = setInterval(fetchMatches, 5000);
-        return () => clearInterval(interval);
+      fetchMatches();
     }
-  }, [currentUser, strictMode]);
+  }, [currentUser.id, strictMode]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mr-3" />
+        <span className="text-slate-600 dark:text-slate-400">Finding perfect matches...</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 relative">
-      {selectedUserForExchange && (
-        <RequestExchangeModal 
-            currentUser={currentUser}
-            targetUser={selectedUserForExchange}
-            onClose={() => setSelectedUserForExchange(null)}
-        />
-      )}
-
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Find Learning Peers</h2>
-          <p className="text-slate-500 dark:text-slate-400">AI-powered matching based on skills & interests.</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-500/30 px-4 py-2 rounded-full flex items-center text-emerald-700 dark:text-emerald-300 text-sm animate-pulse">
-             <Globe className="w-4 h-4 mr-2" />
-             <span>Live Search Active</span>
-          </div>
-          
-          {/* Strict Mode Toggle */}
-          <button
-            onClick={() => setStrictMode(!strictMode)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-all ${
-              strictMode 
-                ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-300' 
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            <span className="text-sm font-medium">
-              {strictMode ? 'Strict Mode' : 'Flexible Mode'}
-            </span>
-          </button>
-        </div>
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Find Peers</h2>
+        <p className="text-slate-500 dark:text-slate-400">Connect with people who share your skills and interests.</p>
       </div>
 
-      {/* Strict Mode Info */}
-      {strictMode && (
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/30 rounded-lg p-4">
-          <div className="flex items-start space-x-3">
-            <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-indigo-900 dark:text-indigo-100">Strict Matching Mode</h3>
-              <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
-                Only showing mentors who are <strong>verified</strong> in the <strong>exact skills</strong> you want to learn. 
-                No similar skills, no unverified users - perfect matches only.
-              </p>
-              <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-2">
-                Found {strictMatches.length} strict match{strictMatches.length !== 1 ? 'es' : ''} for your learning goals.
-              </p>
+      {/* Strict Mode Toggle */}
+      <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
+        <div>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Strict Matching Mode</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            {strictMode
+              ? "Only shows mentors with verified skills you want to learn"
+              : "Shows all potential matches with flexible compatibility scoring"
+            }
+          </p>
+        </div>
+        <button
+          onClick={() => setStrictMode(!strictMode)}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            strictMode ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'
+          }`}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            strictMode ? 'translate-x-6' : 'translate-x-1'
+          }`} />
+        </button>
+      </div>
+
+      {/* Recommendations */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {recommendations.map((rec, index) => (
+          <div key={rec.user.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 hover:shadow-lg transition-shadow">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <img src={rec.user.avatar} alt={rec.user.name} className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-800" />
+                <div>
+                  <h3 className="font-semibold text-slate-900 dark:text-slate-100">{rec.user.name}</h3>
+                  <div className="flex items-center space-x-1">
+                    <div className="flex text-yellow-400">
+                      {[...Array(5)].map((_, i) => (
+                        <span key={i} className={i < Math.floor(rec.user.rating) ? "text-yellow-400" : "text-slate-300"}>
+                          ★
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">({rec.user.rating})</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-indigo-600">{rec.matchScore}%</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Match</div>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 line-clamp-3">
+              {rec.reasoning}
+            </p>
+
+            <div className="flex space-x-2">
+              <button
+                onClick={() => onMessageUser(rec.user.id)}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Message
+              </button>
+              <button
+                onClick={() => setSelectedUserForExchange(rec.user)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Connect
+              </button>
             </div>
           </div>
+        ))}
+      </div>
+
+      {recommendations.length === 0 && (
+        <div className="text-center py-12">
+          <Globe className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">No matches found</h3>
+          <p className="text-slate-500 dark:text-slate-400">
+            {strictMode
+              ? "Try disabling strict mode to see more potential matches"
+              : "Update your profile to find better matches"
+            }
+          </p>
         </div>
       )}
 
-      {loading && recommendations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64">
-          <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-4" />
-          <p className="text-slate-500 dark:text-slate-400">Finding the best learning partners for you...</p>
-        </div>
-      ) : recommendations.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-10 flex flex-col items-center text-center">
-            <AlertCircle className="w-12 h-12 text-slate-500 dark:text-slate-400 mb-4" />
-            <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-              {strictMode ? 'No strict matches found' : 'No matches found yet'}
-            </h3>
-            <p className="text-slate-500 dark:text-slate-400 max-w-md">
-              {strictMode 
-                ? 'No verified mentors found for your exact learning goals. Try switching to Flexible Mode or add more specific skills to your learning goals.'
-                : 'We are searching for peers. Try adding more skills or learning goals to improve matching.'
-              }
-            </p>
-            {strictMode && (
-              <button
-                onClick={() => setStrictMode(false)}
-                className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
-              >
-                Switch to Flexible Mode
-              </button>
-            )}
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {recommendations.map((match, idx) => (
-            <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden hover:border-indigo-500/50 transition-all duration-300 group flex flex-col h-full animate-[fade-in_0.5s_ease-out]">
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="flex justify-between items-start mb-4">
-                  <img src={match.user.avatar} alt={match.user.name} className="w-16 h-16 rounded-full border-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 object-cover" />
-                  <div className="flex flex-col items-end gap-1">
-                    {strictMode && strictMatches.some(m => m.id === match.user.id) && (
-                      <div className="flex items-center space-x-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-md text-xs font-medium mb-1">
-                        <Shield className="w-3 h-3" />
-                        <span>Strict Match</span>
-                      </div>
-                    )}
-                    <div className="flex items-center space-x-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded-md text-sm font-medium">
-                        <Sparkles className="w-3 h-3" />
-                        <span>{match.matchScore}% Match</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-1">{match.user.name}</h3>
-
-                {/* Common Interests from AI */}
-                {match.commonInterests && match.commonInterests.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-3 mt-2">
-                        {match.commonInterests.slice(0, 4).map((interest, i) => (
-                             <span key={i} className="text-[10px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-500/20">
-                                {interest}
-                            </span>
-                        ))}
-                    </div>
-                )}
-                
-                <p className="text-slate-500 dark:text-slate-400 text-sm mb-4 min-h-[40px] line-clamp-2">{match.user.bio}</p>
-                
-                <div className="space-y-3 mb-6 flex-1">
-                    <div className="text-sm">
-                        <span className="text-slate-600 dark:text-slate-400">Can teach you:</span>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                            {match.user.skillsKnown.length > 0 ? match.user.skillsKnown.slice(0, 3).map(s => (
-                                <span key={s.id} className={`text-xs px-2 py-0.5 rounded border flex items-center ${
-                                    s.verified 
-                                    ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20' 
-                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                                }`}>
-                                    {s.name}
-                                    {s.verified && <CheckCircle2 className="w-3 h-3 ml-1" />}
-                                    {s.verified && s.score && <span className="ml-1 text-[10px] opacity-80">({s.score}%)</span>}
-                                </span>
-                            )) : <span className="text-xs text-slate-500 dark:text-slate-400">No skills added</span>}
-                        </div>
-                    </div>
-                    <div className="text-sm">
-                        <span className="text-slate-600 dark:text-slate-400">Wants to learn:</span>
-                         <div className="flex flex-wrap gap-2 mt-1">
-                            {match.user.skillsToLearn.length > 0 ? match.user.skillsToLearn.slice(0, 3).map(s => (
-                                <span key={s} className="text-xs bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-500/20">
-                                    {s}
-                                </span>
-                            )) : <span className="text-xs text-slate-500 dark:text-slate-400">No goals added</span>}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 mb-6">
-                    <p className="text-xs text-slate-600 dark:text-slate-400 italic">" {match.reasoning} "</p>
-                </div>
-
-                <div className="flex space-x-3 mt-auto">
-                  <button 
-                    onClick={() => setSelectedUserForExchange(match.user)}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-medium text-sm flex items-center justify-center space-x-2 transition"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Request Exchange</span>
-                  </button>
-                   <button 
-                    onClick={() => onMessageUser(match.user.id)}
-                    className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 p-2 rounded-lg transition"
-                    title="Message"
-                   >
-                    <MessageCircle className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Exchange Modal */}
+      {selectedUserForExchange && (
+        <RequestExchangeModal
+          targetUser={selectedUserForExchange}
+          currentUser={currentUser}
+          onClose={() => setSelectedUserForExchange(null)}
+        />
       )}
     </div>
   );
