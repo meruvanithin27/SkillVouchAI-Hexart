@@ -67,14 +67,26 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Environment validation
+// Environment validation with better error handling
 const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingEnvVars.length > 0) {
   console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
+  console.error('🔧 Please set these environment variables in Render dashboard:');
+  missingEnvVars.forEach(varName => {
+    console.error(`   - ${varName}`);
+  });
+  console.error('📖 For help: https://render.com/docs/environment-variables');
   process.exit(1);
 }
+
+// Log successful environment variable loading (without showing secrets)
+console.log('✅ Environment variables loaded successfully');
+console.log(`🔗 MongoDB URI: ${process.env.MONGO_URI ? 'Set' : 'Missing'}`);
+console.log(`🔐 JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Missing'}`);
+console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'Not set'}`);
+console.log(`🚀 PORT: ${process.env.PORT || '5000 (default)'}`);
 
 // MongoDB connection with retry logic
 const connectDB = async () => {
