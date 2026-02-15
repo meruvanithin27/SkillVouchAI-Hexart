@@ -5,11 +5,15 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 
-// Trust proxy for production (Render)
-app.set('trust proxy', true);
+// Trust proxy for production (Render) - Fix rate limit issue
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet());
@@ -35,7 +39,7 @@ app.use(cors({
 // Environment variables with fallbacks
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://meruvanithinkumarreddy_db_user:k6UWfK6UewtlZX44@cluster0.imqsaat.mongodb.net/skillvouch?retryWrites=true&w=majority";
 const JWT_SECRET = process.env.JWT_SECRET || "sQQTP8UgvUDMaorbj4P1aRIcbAyA2uun0o1FV+YdLKM=";
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 console.log('🔧 Starting server with configuration:');
 console.log(`🔗 MongoDB URI: ${MONGO_URI ? 'Set' : 'Missing'}`);
@@ -273,8 +277,7 @@ const roadmapSchema = new mongoose.Schema({
   generatedAt: { type: Date, default: Date.now }
 });
 
-// Create indexes for performance
-userSchema.index({ email: 1 });
+// Create indexes for performance (remove duplicate email index)
 userSchema.index({ 'knownSkills.skillName': 1 });
 userSchema.index({ 'skillsToLearn.skillName': 1 });
 
@@ -1104,14 +1107,26 @@ Requirements:
       // Extract JSON safely
       let jsonResponse;
       try {
-        // Find JSON in the response (in case there's extra text)
-        const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          throw new Error('No JSON found in AI response');
-        }
+        // Parse the response as JSON first
+        const fullResponse = JSON.parse(rawResponse);
+        console.log('📊 Full Parsed Response:', fullResponse);
         
-        jsonResponse = JSON.parse(jsonMatch[0]);
-        console.log('📊 Parsed JSON Response:', jsonResponse);
+        // Extract the content from Mistral's response structure
+        if (fullResponse.choices && fullResponse.choices[0] && fullResponse.choices[0].message) {
+          const content = fullResponse.choices[0].message.content;
+          console.log('📝 AI Content:', content);
+          
+          // Find JSON in the content (in case there's extra text)
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) {
+            throw new Error('No JSON found in AI response content');
+          }
+          
+          jsonResponse = JSON.parse(jsonMatch[0]);
+          console.log('📊 Parsed JSON Response:', jsonResponse);
+        } else {
+          throw new Error('Invalid response structure from Mistral API');
+        }
       } catch (parseError) {
         console.error('❌ JSON Parse Error:', parseError);
         throw new Error(`Invalid JSON from AI: ${parseError.message}`);
@@ -1140,8 +1155,12 @@ Requirements:
           throw new Error(`Question ${index + 1}: Missing or invalid correctAnswer`);
         }
         
-        if (!q.options.includes(q.correctAnswer)) {
-          throw new Error(`Question ${index + 1}: correctAnswer must match one of the options`);
+        // Find the correct answer index (A=0, B=1, C=2, D=3)
+        const answerMap = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
+        const correctIndex = answerMap[q.correctAnswer];
+        
+        if (correctIndex === undefined || correctIndex < 0 || correctIndex >= 4) {
+          throw new Error(`Question ${index + 1}: correctAnswer must be A, B, C, or D`);
         }
 
         // Convert to frontend format
@@ -1149,7 +1168,7 @@ Requirements:
           id: `q_${index + 1}`,
           question: q.question,
           options: q.options,
-          correct: q.options.indexOf(q.correctAnswer),
+          correct: correctIndex,
           explanation: `This question tests your knowledge of ${skill}.`
         };
       });
