@@ -21,6 +21,14 @@ export default defineConfig(({ mode }) => {
           }
         }
       },
+      build: {
+        cssCodeSplit: false,
+        rollupOptions: {
+          output: {
+            manualChunks: undefined,
+          }
+        }
+      },
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),

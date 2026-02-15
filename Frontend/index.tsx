@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import './src/index.css';
 
 // Environment validation
 console.log('🔍 Environment Check:');
@@ -26,3 +27,11 @@ root.render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+// Add loaded class to root element after app mounts
+setTimeout(() => {
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    rootElement.classList.add('loaded');
+  }
+}, 100);
