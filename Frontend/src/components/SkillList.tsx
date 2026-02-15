@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Skill } from '../types';
 import { suggestSkills } from '../services/mistralService';
 import { dbService } from '../services/dbService';
+import { apiService } from '../services/apiService';
 import { Plus, Trash2, Award, BookOpen, Sparkles, RefreshCw, Loader2, ShieldCheck } from 'lucide-react';
 import { QuizModal } from './QuizModal';
 
