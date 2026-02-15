@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 // API Configuration
-const API_URL = import.meta.env.VITE_API_URL || 'https://skillvouch-hexart-vv85.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'https://skillvouchai-hexart.onrender.com';
 
 // Create axios instance
 const API = axios.create({
@@ -114,17 +114,13 @@ function App() {
       const response = await API.post(endpoint, formData);
       
       if (response.data.success) {
-        const { token } = response.data.data;
+        const { token, user } = response.data.data;
         
-        // Get user profile
-        const profileResponse = await API.get('/api/auth/profile');
-        if (profileResponse.data.success) {
-          const userData = profileResponse.data.data.user;
-          localStorage.setItem('authToken', token);
-          localStorage.setItem('authUser', JSON.stringify(userData));
-          setUser(userData);
-          setError('');
-        }
+        // Store token and user data directly
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('authUser', JSON.stringify(user));
+        setUser(user);
+        setError('');
       } else {
         setError(response.data.message || 'Authentication failed');
       }

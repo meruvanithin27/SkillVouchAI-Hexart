@@ -3,13 +3,29 @@ import cors from "cors";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 const app = express();
+
+// Security middleware
+app.use(helmet());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: {
+    success: false,
+    message: "Too many requests from this IP, please try again later."
+  }
+});
+app.use('/api/', limiter);
 
 // Basic middleware
 app.use(express.json());
 app.use(cors({
-  origin: ["https://skillvouch-hexart.vercel.app", "https://skillvouch-hexart2026.vercel.app", "http://localhost:3000", "http://localhost:5173"],
+  origin: ["https://skillvouch-hexart.vercel.app", "https://skillvouch-hexart2026.vercel.app", "https://skillvouchai-hexart.onrender.com", "http://localhost:3000", "http://localhost:5173"],
   credentials: true
 }));
 
@@ -117,6 +133,59 @@ process.on('SIGINT', async () => {
 
 // Initialize database connection
 connectDB();
+
+// Protected middleware
+const protect = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: "Access denied. No token provided."
+      });
+    }
+    
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Access denied. No token provided."
+      });
+    }
+    
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.userId).select('-password');
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token. User not found."
+      });
+    }
+    
+    req.user = user;
+    next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token."
+      });
+    } else if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        message: "Token expired."
+      });
+    } else {
+      return res.status(401).json({
+        success: false,
+        message: "Token verification failed."
+      });
+    }
+  }
+};
 
 // User schema
 const userSchema = new mongoose.Schema({
@@ -251,10 +320,20 @@ app.post("/api/auth/signup", async (req, res) => {
     
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
     
+    // Return user data without password
+    const userResponse = {
+      _id: user._id,
+      email: user.email,
+      createdAt: user.createdAt
+    };
+    
     res.status(201).json({
       success: true,
       message: "User created successfully",
-      data: { token }
+      data: { 
+        token,
+        user: userResponse
+      }
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -308,10 +387,20 @@ app.post("/api/auth/login", async (req, res) => {
     
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
     
+    // Return user data without password
+    const userResponse = {
+      _id: user._id,
+      email: user.email,
+      createdAt: user.createdAt
+    };
+    
     res.json({
       success: true,
       message: "Login successful",
-      data: { token }
+      data: { 
+        token,
+        user: userResponse
+      }
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -329,7 +418,7 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 // Profile route
-app.get("/api/auth/profile", async (req, res) => {
+app.get("/api/auth/profile", protect, async (req, res) => {
   try {
     const dbStatus = getDatabaseStatus();
     if (dbStatus !== 'connected') {
@@ -338,29 +427,11 @@ app.get("/api/auth/profile", async (req, res) => {
         message: "Database is not connected. Please try again later."
       });
     }
-
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "No token provided"
-      });
-    }
-    
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(decoded.userId).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found"
-      });
-    }
     
     res.json({
       success: true,
       message: "Profile retrieved",
-      data: { user }
+      data: { user: req.user }
     });
   } catch (error) {
     console.error('Profile error:', error);
@@ -370,9 +441,9 @@ app.get("/api/auth/profile", async (req, res) => {
         message: "Database connection error. Please try again."
       });
     }
-    res.status(401).json({
+    res.status(500).json({
       success: false,
-      message: "Invalid token"
+      message: "Server error"
     });
   }
 });
