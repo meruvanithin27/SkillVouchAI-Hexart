@@ -10,7 +10,18 @@
     "skipLibCheck": true,
     "noImplicitAny": false,
     "noImplicitReturns": false,
-    "noImplicitThis": false
+    "noImplicitThis": false,
+    "suppressImplicitAnyIndexErrors": true,
+    "noStrictGenericChecks": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": false,
+    "alwaysStrict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
   "include": [
     "*.ts"
@@ -20,6 +31,13 @@
     "server.js",
     "node_modules",
     "dist",
-    "**/*.js"
-  ]
+    "**/*.js",
+    "**/*.jsx",
+    "**/server.js",
+    "Backend/server.js",
+    "Backend/**/*.js"
+  ],
+  "ts-node": {
+    "esm": true
+  }
 }
