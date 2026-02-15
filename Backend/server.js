@@ -28,6 +28,18 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  console.log('🔍 Health check requested');
+  res.json({
+    status: "ok",
+    timestamp: new Date(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    frontend: process.env.FRONTEND_URL || 'not configured'
+  });
+});
+
 // Production logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
