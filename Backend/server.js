@@ -953,6 +953,197 @@ app.delete('/api/skills/learn/:skillName', protect, async (req, res) => {
   }
 });
 
+// Skill Suggestions with AI
+app.post('/api/skills/suggest', protect, async (req, res) => {
+  try {
+    const { currentSkills = [], currentGoals = [] } = req.body;
+    const userId = req.user._id;
+
+    console.log(`🤖 Generating skill suggestions for user ${userId}`);
+    console.log(`📊 Current skills: ${currentSkills.join(', ')}`);
+    console.log(`🎯 Learning goals: ${currentGoals.join(', ')}`);
+
+    // Validate AI Configuration
+    const mistralApiKey = process.env.MISTRAL_API_KEY;
+    if (!mistralApiKey) {
+      console.error('❌ MISTRAL_API_KEY not found');
+      return res.status(500).json({
+        success: false,
+        message: "AI features are not available - MISTRAL_API_KEY not configured"
+      });
+    }
+
+    // Create comprehensive prompt for skill suggestions
+    const prompt = `Based on a user's current skills: ${currentSkills.join(', ')}
+And their learning goals: ${currentGoals.join(', ')}
+
+Suggest 5 highly relevant skills they should learn next. Consider:
+1. Complementary skills that build on what they know
+2. Skills that help achieve their stated goals
+3. Market demand and career advancement potential
+4. Skill progression and logical learning paths
+
+For each suggested skill, provide:
+- A brief explanation of why it's valuable
+- The category/field it belongs to
+
+Return exactly this JSON format:
+{
+  "skills": ["Skill1", "Skill2", "Skill3", "Skill4", "Skill5"],
+  "recommendations": {
+    "Skill1": "Explanation why this skill is valuable...",
+    "Skill2": "Explanation why this skill is valuable...",
+    "Skill3": "Explanation why this skill is valuable...",
+    "Skill4": "Explanation why this skill is valuable...",
+    "Skill5": "Explanation why this skill is valuable..."
+  },
+  "categories": {
+    "Skill1": "Category/Field",
+    "Skill2": "Category/Field",
+    "Skill3": "Category/Field",
+    "Skill4": "Category/Field",
+    "Skill5": "Category/Field"
+  }
+}`;
+
+    // Call Mistral API
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mistralApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'mistral-large-latest',
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 1000
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Mistral API error: ${response.status} ${response.statusText}`);
+    }
+
+    const aiResponse = await response.json();
+
+    if (!aiResponse.choices || !aiResponse.choices[0] || !aiResponse.choices[0].message) {
+      throw new Error('Invalid response structure from Mistral API');
+    }
+
+    const content = aiResponse.choices[0].message.content;
+    console.log('🤖 AI Response received');
+
+    // Parse JSON response
+    let parsedData;
+    try {
+      // Clean the response in case there's extra text
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in AI response');
+      }
+
+      parsedData = JSON.parse(jsonMatch[0]);
+
+      // Validate response structure
+      if (!parsedData.skills || !Array.isArray(parsedData.skills)) {
+        throw new Error('Invalid skills array in response');
+      }
+
+      if (parsedData.skills.length === 0) {
+        throw new Error('No skills suggested');
+      }
+
+      // Filter out skills user already knows
+      const filteredSkills = parsedData.skills.filter(skill =>
+        !currentSkills.some(known =>
+          known.toLowerCase() === skill.toLowerCase()
+        )
+      );
+
+      // If we filtered out too many, add some fallback skills
+      if (filteredSkills.length < 3) {
+        const fallbackSkills = [
+          'Project Management', 'Data Analysis', 'Cloud Computing',
+          'DevOps', 'UI/UX Design', 'Agile Methodology'
+        ].filter(skill =>
+          !currentSkills.some(known =>
+            known.toLowerCase() === skill.toLowerCase()
+          )
+        );
+
+        filteredSkills.push(...fallbackSkills.slice(0, 5 - filteredSkills.length));
+      }
+
+      const finalSkills = filteredSkills.slice(0, 5);
+
+      // Create recommendations and categories for final skills
+      const recommendations = {};
+      const categories = {};
+
+      finalSkills.forEach((skill, index) => {
+        recommendations[skill] = parsedData.recommendations?.[skill] ||
+          parsedData.recommendations?.[parsedData.skills[index]] ||
+          `Learn ${skill} to enhance your skills portfolio and career opportunities.`;
+
+        categories[skill] = parsedData.categories?.[skill] ||
+          parsedData.categories?.[parsedData.skills[index]] ||
+          'Professional Development';
+      });
+
+      console.log(`✅ Generated ${finalSkills.length} skill suggestions`);
+
+      res.json({
+        skills: finalSkills,
+        recommendations,
+        categories
+      });
+
+    } catch (parseError) {
+      console.error('❌ JSON parsing error:', parseError);
+      console.error('Raw AI response:', content);
+
+      // Fallback response if AI parsing fails
+      const fallbackSkills = [
+        'Project Management', 'Data Analysis', 'Cloud Computing',
+        'DevOps', 'UI/UX Design'
+      ].filter(skill =>
+        !currentSkills.some(known =>
+          known.toLowerCase() === skill.toLowerCase()
+        )
+      ).slice(0, 5);
+
+      const fallbackRecommendations = {};
+      const fallbackCategories = {};
+
+      fallbackSkills.forEach(skill => {
+        fallbackRecommendations[skill] = `Learn ${skill} to enhance your professional skills and career opportunities.`;
+        fallbackCategories[skill] = 'Professional Development';
+      });
+
+      console.log('⚠️ Using fallback skill suggestions');
+
+      res.json({
+        skills: fallbackSkills,
+        recommendations: fallbackRecommendations,
+        categories: fallbackCategories
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Skill suggestion error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate skill suggestions"
+    });
+  }
+});
+
 // Enhanced profile endpoint - always returns latest DB data
 app.get('/api/user/profile', protect, async (req, res) => {
   try {
