@@ -583,6 +583,164 @@ app.get('/api/users/:id', protect, async (req, res) => {
   }
 });
 
+// Quiz generation endpoint
+app.post('/quiz/generate', protect, async (req, res) => {
+  try {
+    const dbStatus = getDatabaseStatus();
+    if (dbStatus !== 'connected') {
+      return res.status(503).json({
+        success: false,
+        message: "Database is not connected. Please try again later."
+      });
+    }
+
+    const { skill, difficulty = 'medium' } = req.body;
+
+    if (!skill || typeof skill !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: "Skill name is required"
+      });
+    }
+
+    console.log(`🎯 Generating quiz for skill: ${skill} (difficulty: ${difficulty})`);
+
+    // Generate quiz questions based on skill
+    const quizQuestions = generateQuizQuestions(skill, difficulty);
+
+    console.log(`✅ Generated ${quizQuestions.length} quiz questions for ${skill}`);
+
+    res.json({
+      success: true,
+      message: "Quiz generated successfully",
+      data: {
+        skill: skill,
+        difficulty: difficulty,
+        questions: quizQuestions,
+        timeLimit: quizQuestions.length * 30 // 30 seconds per question
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Quiz generation error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate quiz. Please try again."
+    });
+  }
+});
+
+// Helper function to generate quiz questions
+function generateQuizQuestions(skill, difficulty) {
+  const questionTemplates = {
+    beginner: [
+      {
+        question: `What is the basic concept of ${skill}?`,
+        options: [
+          "A fundamental building block",
+          "An advanced technique", 
+          "A deprecated method",
+          "A theoretical concept"
+        ],
+        correct: 0
+      },
+      {
+        question: `Which of the following is a common use case for ${skill}?`,
+        options: [
+          "Web development",
+          "Data analysis",
+          "Mobile applications",
+          "All of the above"
+        ],
+        correct: 3
+      },
+      {
+        question: `What is the primary benefit of using ${skill}?`,
+        options: [
+          "Improved performance",
+          "Better code organization",
+          "Enhanced user experience",
+          "All of the above"
+        ],
+        correct: 3
+      }
+    ],
+    medium: [
+      {
+        question: `Which design pattern is commonly associated with ${skill}?`,
+        options: [
+          "Singleton pattern",
+          "Observer pattern",
+          "Factory pattern",
+          "Depends on the specific use case"
+        ],
+        correct: 3
+      },
+      {
+        question: `What is the best practice for error handling in ${skill}?`,
+        options: [
+          "Ignore errors",
+          "Use try-catch blocks",
+          "Return null values",
+          "Log errors to console"
+        ],
+        correct: 1
+      },
+      {
+        question: `How would you optimize performance when working with ${skill}?`,
+        options: [
+          "Use caching mechanisms",
+          "Minimize database queries",
+          "Implement lazy loading",
+          "All of the above"
+        ],
+        correct: 3
+      }
+    ],
+    advanced: [
+      {
+        question: `What is the most complex challenge when implementing ${skill} at scale?`,
+        options: [
+          "Memory management",
+          "Concurrency issues",
+          "Network latency",
+          "All of the above"
+        ],
+        correct: 3
+      },
+      {
+        question: `Which architectural pattern best suits large-scale ${skill} applications?`,
+        options: [
+          "Monolithic architecture",
+          "Microservices architecture",
+          "Serverless architecture",
+          "Depends on requirements"
+        ],
+        correct: 3
+      },
+      {
+        question: `How would you handle security vulnerabilities specific to ${skill}?`,
+        options: [
+          "Input validation",
+          "Authentication and authorization",
+          "Encryption and hashing",
+          "All of the above"
+        ],
+        correct: 3
+      }
+    ]
+  };
+
+  const questions = questionTemplates[difficulty] || questionTemplates.medium;
+  
+  // Randomize questions and add IDs
+  return questions.map((q, index) => ({
+    id: `q_${index + 1}`,
+    ...q,
+    explanation: `This question tests your understanding of ${skill} concepts.`
+  }));
+}
+
 // Root route
 app.get("/", (req, res) => {
   const dbStatus = getDatabaseStatus();
@@ -593,7 +751,7 @@ app.get("/", (req, res) => {
       version: "1.0.0",
       status: "running",
       database: dbStatus,
-      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile", "/api/users", "/api/users/:id"]
+      endpoints: ["/health", "/api/health", "/api/test-db", "/api/auth/signup", "/api/auth/login", "/api/auth/profile", "/api/users", "/api/users/:id", "/quiz/generate"]
     }
   });
 });
