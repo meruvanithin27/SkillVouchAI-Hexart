@@ -4,8 +4,8 @@ services:
     name: skillvouch-backend
     env: node
     plan: free
-    buildCommand: "cd Backend && npm install"
-    startCommand: "cd Backend && npm start"
+    buildCommand: "npm run build"
+    startCommand: "npm start"
     envVars:
       - key: NODE_ENV
         value: production
