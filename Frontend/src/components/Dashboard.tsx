@@ -44,7 +44,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
     const loadDashboardData = async () => {
         setLoading(true);
         // 1. Fetch Conversations Count
-        const convs = await dbService.getConversations(user.id);
+        const convs = await dbService.getConversations();
         setActiveConnectionCount(convs.length);
 
         // 2. Fetch Exchanges Count

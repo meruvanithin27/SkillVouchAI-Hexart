@@ -123,7 +123,7 @@ export const dbService = {
     return apiService.subscribeToConversation(user1Id, user2Id, callback);
   },
 
-  getConversations: async (userId: string): Promise<User[]> => {
-    return apiService.getConversations(userId);
+  getConversations: async (): Promise<User[]> => {
+    return apiService.getConversations();
   }
 };

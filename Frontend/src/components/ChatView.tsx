@@ -26,7 +26,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser, initialChatUser
   // Load conversations and optionally set initial active user
   useEffect(() => {
     const loadData = async () => {
-      let convs = await dbService.getConversations(currentUser.id);
+      let convs = await dbService.getConversations();
       
       // If we are starting a chat with someone new who isn't in conversations list yet
       if (initialChatUserId) {
@@ -109,7 +109,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser, initialChatUser
     
     // If this was the first message, refresh conversations list
     if (messages.length === 0) {
-        const convs = await dbService.getConversations(currentUser.id);
+        const convs = await dbService.getConversations();
         setConversations(convs);
     }
   };

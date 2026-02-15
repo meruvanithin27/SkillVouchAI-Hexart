@@ -282,9 +282,9 @@ export const apiService = {
     return () => clearInterval(interval);
   },
 
-  getConversations: async (userId: string): Promise<User[]> => {
+  getConversations: async (): Promise<User[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await API.get(`/conversations?userId=${userId}`);
+    const response = await API.get('/api/messages/conversations');
     return response.data;
   },
 
