@@ -194,6 +194,21 @@ const protect = async (req, res, next) => {
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  name: { type: String, default: '' },
+  avatar: { type: String, default: '' },
+  skillsKnown: [{
+    id: { type: String, required: true },
+    name: { type: String, required: true },
+    verified: { type: Boolean, default: false },
+    score: { type: Number, default: 0 }
+  }],
+  skillsToLearn: [{ type: String }],
+  bio: { type: String, default: '' },
+  discordLink: { type: String },
+  rating: { type: Number, default: 5, min: 1, max: 5 },
+  languages: [{ type: String }],
+  preferredLanguage: { type: String, default: 'English' },
+  availability: [{ type: String }],
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -506,10 +521,23 @@ app.put('/api/users/:id', protect, async (req, res) => {
       });
     }
 
-    // Update user in database
+    // Update user in database with explicit field setting
+    const updateData = {
+      name: updates.name || '',
+      avatar: updates.avatar || '',
+      skillsKnown: updates.skillsKnown || [],
+      skillsToLearn: updates.skillsToLearn || [],
+      bio: updates.bio || '',
+      discordLink: updates.discordLink || '',
+      rating: updates.rating || 5,
+      languages: updates.languages || [],
+      preferredLanguage: updates.preferredLanguage || 'English',
+      availability: updates.availability || []
+    };
+
     const updatedUser = await User.findByIdAndUpdate(
       id,
-      { $set: updates },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 

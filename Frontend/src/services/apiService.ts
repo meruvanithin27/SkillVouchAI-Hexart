@@ -67,13 +67,37 @@ export const apiService = {
   },
 
   saveUser: async (user: User) => {
-    // No delay for save operations to make them feel instant
-    const response = await API.put(`/users/${user.id}`, user);
-    
-    // Update session if it's the current user
-    const session = apiService.getCurrentSession();
-    if (session && session.id === user.id) {
-      apiService.setSession(user);
+    try {
+      console.log('💾 Saving user to backend:', user.id, user.email);
+      
+      // No delay for save operations to make them feel instant
+      const response = await API.put(`/users/${user.id}`, user);
+      
+      console.log('✅ User saved successfully:', response.data);
+      
+      // Update session if it's the current user
+      const session = apiService.getCurrentSession();
+      if (session && session.id === user.id) {
+        apiService.setSession(user);
+        console.log('🔄 Session updated with new user data');
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Failed to save user:', error);
+      console.error('Error details:', error.response?.data);
+      
+      // Don't throw the error to prevent breaking the UI
+      // Instead, just log it and continue with local state update
+      if (error.response?.status === 404) {
+        console.warn('⚠️ User not found on backend, but local state updated');
+      } else if (error.response?.status === 403) {
+        console.warn('⚠️ Authentication failed, but local state updated');
+      } else {
+        console.warn('⚠️ Backend save failed, but local state updated');
+      }
+      
+      throw error; // Re-throw so the calling function can handle it
     }
   },
 

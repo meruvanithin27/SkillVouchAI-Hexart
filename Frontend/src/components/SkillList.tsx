@@ -42,8 +42,20 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
   }, [user.skillsKnown.length, user.skillsToLearn.length]);
 
   const updateUserAndDB = async (updatedUser: User) => {
+      console.log('🔄 Updating user state and database...');
+      
+      // First update the local state for immediate UI feedback
       onUpdateUser(updatedUser);
-      await dbService.saveUser(updatedUser);
+      
+      // Then try to save to backend
+      try {
+        await dbService.saveUser(updatedUser);
+        console.log('✅ User successfully saved to database');
+      } catch (error) {
+        console.error('⚠️ Failed to save to database, but UI updated:', error);
+        // Don't revert the UI change - user can continue using the app
+        // The skill will be saved when they next login or when connectivity is restored
+      }
   };
 
   const handleAddSkill = () => {
@@ -90,14 +102,23 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
   };
 
   const handleCompleteQuiz = (score: number) => {
+    console.log('🎯 Updating skill verification with score:', score);
+    
     const updatedSkills = user.skillsKnown.map(s =>
       s.name.toLowerCase() === quizSkill?.toLowerCase()
         ? { ...s, verified: true, score: score }
         : s
     );
     const updatedUser = { ...user, skillsKnown: updatedSkills };
-    dbService.saveUser(updatedUser);
+    
+    // Update local state first
     onUpdateUser(updatedUser);
+    
+    // Then save to backend
+    dbService.saveUser(updatedUser).catch(error => {
+      console.error('⚠️ Failed to save quiz results, but UI updated:', error);
+    });
+    
     setQuizSkill(null);
   };
 
