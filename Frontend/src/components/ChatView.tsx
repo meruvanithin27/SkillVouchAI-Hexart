@@ -130,7 +130,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser, initialChatUser
   const openDiscordCall = () => {
     if (!activeUser) return;
     if (!activeUser.discordLink) {
-      alert(`${activeUser.name.split(' ')[0]} has not added a Discord link yet.`);
+      alert(`${(activeUser.name || '').split(' ')[0]} has not added a Discord link yet.`);
       return;
     }
 
@@ -515,7 +515,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser, initialChatUser
                       <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-indigo-200 dark:from-indigo-900/30 dark:to-indigo-800/30 rounded-full flex items-center justify-center mx-auto mb-4">
                           <MessageSquare className="w-10 h-10 text-indigo-600 dark:text-indigo-400" />
                       </div>
-                      <p className="text-slate-600 dark:text-slate-400 text-sm font-medium">Start the conversation with {activeUser.name.split(' ')[0]}!</p>
+                      <p className="text-slate-600 dark:text-slate-400 text-sm font-medium">Start the conversation with {(activeUser.name || '').split(' ')[0]}!</p>
                       <p className="text-slate-500 dark:text-slate-500 text-xs mt-1">Send a message to begin learning together</p>
                   </div>
               ) : (

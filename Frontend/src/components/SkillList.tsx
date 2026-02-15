@@ -55,7 +55,7 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
         // Transform backend user data to frontend format
         const transformedUser = {
           id: freshUserData._id,
-          name: freshUserData.name || freshUserData.email.split('@')[0],
+          name: freshUserData.name || (freshUserData.email || '').split('@')[0],
           email: freshUserData.email,
           avatar: freshUserData.avatar || '',
           skillsKnown: freshUserData.knownSkills || [],
@@ -145,7 +145,7 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
       // Transform backend user data to frontend format
       const transformedUser = {
         id: freshUserData._id,
-        name: freshUserData.name || freshUserData.email.split('@')[0],
+        name: freshUserData.name || (freshUserData.email || '').split('@')[0],
         email: freshUserData.email,
         avatar: freshUserData.avatar || '',
         skillsKnown: freshUserData.knownSkills || [],

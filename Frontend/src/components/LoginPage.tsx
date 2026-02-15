@@ -41,7 +41,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onBackToLa
         
         const transformedUser = {
           id: backendUser._id,
-          name: backendUser.email.split('@')[0],
+          name: (backendUser.email || '').split('@')[0],
           email: backendUser.email,
           avatar: '',
           skillsKnown: [],

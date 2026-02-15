@@ -125,7 +125,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigateToProfile,
     <div className="space-y-8 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Welcome back, {user.name.split(' ')[0]}</h2>
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Welcome back, {(user.name || '').split(' ')[0]}</h2>
           <p className="text-slate-500 dark:text-slate-400">Here is your learning progress overview.</p>
         </div>
         <div className="flex items-center space-x-2 bg-white dark:bg-slate-900 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">

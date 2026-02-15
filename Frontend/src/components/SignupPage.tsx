@@ -59,7 +59,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess, onBackT
         
         const transformedUser = {
           id: backendUser._id,
-          name: backendUser.email.split('@')[0],
+          name: (backendUser.email || '').split('@')[0],
           email: backendUser.email,
           avatar: '',
           skillsKnown: [],

@@ -33,7 +33,7 @@ interface RequestExchangeModalProps {
 export const RequestExchangeModal: React.FC<RequestExchangeModalProps> = ({ currentUser, targetUser, onClose }) => {
   const [offeredSkill, setOfferedSkill] = useState('');
   const [requestedSkill, setRequestedSkill] = useState('');
-  const [message, setMessage] = useState(`Hi ${targetUser.name.split(' ')[0]}, I'd love to exchange skills with you!`);
+  const [message, setMessage] = useState(`Hi ${(targetUser.name || '').split(' ')[0]}, I'd love to exchange skills with you!`);
   const [isSuccess, setIsSuccess] = useState(false);
 
   // Pre-fill logic based on matching skills

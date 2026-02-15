@@ -58,8 +58,8 @@ export const MatchFinder: React.FC<MatchFinderProps> = ({ currentUser, onMessage
       }
 
       // 3. Bio Keyword Overlap (Max 10 pts)
-      const myKeywords = me.bio.toLowerCase().split(/\W+/).filter(w => w.length > 4);
-      const theirBio = candidate.bio.toLowerCase();
+      const myKeywords = (me.bio || '').toLowerCase().split(/\W+/).filter(w => w.length > 4);
+      const theirBio = (candidate.bio || '').toLowerCase();
       let keywordMatches = 0;
       myKeywords.forEach(word => {
           if (theirBio.includes(word)) keywordMatches++;
