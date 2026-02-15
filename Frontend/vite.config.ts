@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
         proxy: {
           '/api': {
-            target: env.NEXT_PUBLIC_API_URL || 'http://localhost:3000',
+            target: env.VITE_API_URL || 'http://localhost:3000',
             changeOrigin: true,
             secure: false,
           }

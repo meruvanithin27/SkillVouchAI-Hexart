@@ -2,12 +2,31 @@ import express from 'express';
 import cors from 'cors';
 import mongoose, { connectDB } from './db.js';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { generateQuiz } from './ai/mistralQuiz.js';
 import { suggestSkills, generateRoadmap } from './ai/mistralSkills.js';
 import { User, ExchangeRequest, ExchangeFeedback, Message, Quiz, QuizAttempt } from './models/index.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
+
+// Production-ready CORS configuration
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'https://skillvouch-ai-frontend.vercel.app',
+  'http://localhost:3001',
+  'http://localhost:5173'
+].filter(Boolean);
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
 // Production logging middleware
 app.use((req, res, next) => {
@@ -30,9 +49,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors({ origin: true }));
-app.use(express.json());
-
 // Environment validation
 console.log('🔍 Environment Variables Check:');
 console.log(`✅ NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
@@ -40,6 +56,7 @@ console.log(`✅ PORT: ${PORT}`);
 console.log(`✅ MONGODB_URI: ${process.env.MONGODB_URI ? 'Set' : '❌ NOT SET'}`);
 console.log(`✅ JWT_SECRET: ${process.env.JWT_SECRET ? 'Set' : '❌ NOT SET'}`);
 console.log(`✅ MISTRAL_API_KEY: ${process.env.MISTRAL_API_KEY ? 'Set' : '❌ NOT SET'}`);
+console.log(`✅ FRONTEND_URL: ${process.env.FRONTEND_URL || 'Not set'}`);
 
 // Connect to MongoDB before starting server
 try {
@@ -1304,11 +1321,22 @@ app.post('/api/auth/signup', async (req, res) => {
     
     await newUser.save();
     
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: newUser._id, email: newUser.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
     console.log('✅ User created successfully:', { id: newUser._id, email: newUser.email });
     
-    // Return user without password
+    // Return user without password and with token
     const { password: _, ...userResponse } = newUser.toObject();
-    res.status(201).json(userResponse);
+    res.status(201).json({ 
+      user: userResponse, 
+      token,
+      message: 'Account created successfully!' 
+    });
     
   } catch (error) {
     console.error('❌ Signup error:', error);
@@ -1350,11 +1378,22 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
     
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
     console.log('✅ Login successful:', { id: user._id, email: user.email });
     
-    // Return user without password
+    // Return user without password and with token
     const { password: _, ...userResponse } = user.toObject();
-    res.json(userResponse);
+    res.json({ 
+      user: userResponse, 
+      token,
+      message: 'Login successful!' 
+    });
     
   } catch (error) {
     console.error('❌ Login error:', error);
@@ -1363,6 +1402,15 @@ app.post('/api/auth/login', async (req, res) => {
       message: 'Login failed. Please try again.' 
     });
   }
+});
+
+// Test endpoint
+app.get('/api/auth/test', (req, res) => {
+  res.json({ 
+    message: 'Backend is working!',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
 });
 
 app.get('/', (req, res) => {

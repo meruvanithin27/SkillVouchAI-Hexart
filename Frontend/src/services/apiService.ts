@@ -1,7 +1,6 @@
 import { User, ExchangeRequest, Message, ExchangeFeedback } from '../types';
 import { suggestSkillsDirect, generateRoadmapDirect } from './mistralDirectService';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+import API from './axiosService';
 
 // Helper to simulate delay for "real" feel (reduced for better performance)
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -48,21 +47,20 @@ export const apiService = {
   logout: async () => {
     await delay(50); // Reduced from 300ms
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem('authToken');
   },
 
   // --- USER MGMT ---
   getUsers: async (): Promise<User[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await fetch(`${API_BASE_URL}/users`);
-    if (!response.ok) throw new Error('Failed to fetch users');
-    return response.json();
+    const response = await API.get('/users');
+    return response.data;
   },
 
   getUserById: async (id: string): Promise<User | undefined> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${id}`);
-      if (!response.ok) return undefined;
-      return response.json();
+      const response = await API.get(`/users/${id}`);
+      return response.data;
     } catch {
       return undefined;
     }
@@ -70,12 +68,7 @@ export const apiService = {
 
   saveUser: async (user: User) => {
     // No delay for save operations to make them feel instant
-    const response = await fetch(`${API_BASE_URL}/users/${user.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(user)
-    });
-    if (!response.ok) throw new Error('Failed to save user');
+    const response = await API.put(`/users/${user.id}`, user);
     
     // Update session if it's the current user
     const session = apiService.getCurrentSession();
@@ -89,25 +82,24 @@ export const apiService = {
     console.log('🔐 Frontend login attempt for:', email);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password })
+      const response = await API.post('/api/auth/login', { 
+        email: email.trim(), 
+        password 
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-      }
+      const { user, token } = response.data;
       
-      const user = await response.json();
+      // Store token
+      localStorage.setItem('authToken', token);
       apiService.setSession(user);
+      
       console.log('✅ Frontend login successful for:', email);
       return user;
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Frontend login error:', error);
-      throw error;
+      const message = error.response?.data?.message || 'Login failed';
+      throw new Error(message);
     }
   },
 
@@ -115,24 +107,24 @@ export const apiService = {
     console.log('🚀 Frontend signup attempt for:', email);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password })
+      const response = await API.post('/api/auth/signup', {
+        name: name.trim(),
+        email: email.trim(),
+        password
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Signup failed');
-      }
+      const { user, token } = response.data;
       
-      const user = await response.json();
+      // Store token
+      localStorage.setItem('authToken', token);
+      
       console.log('✅ Frontend signup successful for:', email);
       return user;
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Frontend signup error:', error);
-      throw error;
+      const message = error.response?.data?.message || 'Signup failed';
+      throw new Error(message);
     }
   },
 
@@ -157,86 +149,58 @@ export const apiService = {
   // --- REQUESTS ---
   createExchangeRequest: async (request: ExchangeRequest) => {
     await delay(50); // Reduced from 300ms
-    const response = await fetch(`${API_BASE_URL}/requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request)
-    });
-    if (!response.ok) throw new Error('Failed to create request');
+    const response = await API.post('/requests', request);
+    return response.data;
   },
 
   getRequestsForUser: async (userId: string): Promise<ExchangeRequest[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await fetch(`${API_BASE_URL}/requests?userId=${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch requests');
-    return response.json();
+    const response = await API.get(`/requests?userId=${userId}`);
+    return response.data;
   },
 
   updateExchangeRequestStatus: async (id: string, status: ExchangeRequest['status']): Promise<{ success: true; status: ExchangeRequest['status']; completedAt?: number; }> => {
-    const response = await fetch(`${API_BASE_URL}/requests/${id}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    });
-    if (!response.ok) throw new Error('Failed to update request status');
-    return response.json();
+    const response = await API.put(`/requests/${id}/status`, { status });
+    return response.data;
   },
 
   // --- FEEDBACK ---
   submitExchangeFeedback: async (feedback: Omit<ExchangeFeedback, 'id' | 'createdAt'> & Partial<Pick<ExchangeFeedback, 'id' | 'createdAt'>>): Promise<ExchangeFeedback> => {
-    const response = await fetch(`${API_BASE_URL}/feedback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(feedback)
-    });
-    if (!response.ok) throw new Error('Failed to submit feedback');
-    return response.json();
+    const response = await API.post('/feedback', feedback);
+    return response.data;
   },
 
   getReceivedFeedback: async (userId: string): Promise<ExchangeFeedback[]> => {
-    const response = await fetch(`${API_BASE_URL}/feedback/received?userId=${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch feedback');
-    return response.json();
+    const response = await API.get(`/feedback/received?userId=${userId}`);
+    return response.data;
   },
 
   getFeedbackStats: async (userId: string): Promise<{ avgStars: number; count: number }> => {
-    const response = await fetch(`${API_BASE_URL}/feedback/stats?userId=${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch feedback stats');
-    return response.json();
+    const response = await API.get(`/feedback/stats?userId=${userId}`);
+    return response.data;
   },
 
   // --- MESSAGING ---
   sendMessage: async (senderId: string, receiverId: string, content: string): Promise<Message> => {
     // No delay for instant messaging
-    const response = await fetch(`${API_BASE_URL}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ senderId, receiverId, content })
-    });
-    if (!response.ok) throw new Error('Failed to send message');
-    return response.json();
+    const response = await API.post('/messages', { senderId, receiverId, content });
+    return response.data;
   },
 
   getUnreadCount: async (userId: string): Promise<number> => {
-    const response = await fetch(`${API_BASE_URL}/messages/unread-count?userId=${userId}`);
-    if (!response.ok) return 0;
-    const result = await response.json();
+    const response = await API.get(`/messages/unread-count?userId=${userId}`);
+    const result = response.data;
     return result.count || 0;
   },
 
   markAsRead: async (userId: string, senderId: string) => {
-    const response = await fetch(`${API_BASE_URL}/messages/mark-as-read`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, senderId })
-    });
-    if (!response.ok) throw new Error('Failed to mark messages as read');
+    const response = await API.post('/messages/mark-as-read', { userId, senderId });
+    return response.data;
   },
 
   getConversation: async (user1Id: string, user2Id: string): Promise<Message[]> => {
-    const response = await fetch(`${API_BASE_URL}/messages/conversation?user1Id=${user1Id}&user2Id=${user2Id}`);
-    if (!response.ok) throw new Error('Failed to fetch conversation');
-    return response.json();
+    const response = await API.get(`/messages/conversation?user1Id=${user1Id}&user2Id=${user2Id}`);
+    return response.data;
   },
 
   subscribeToConversation: (user1Id: string, user2Id: string, callback: (messages: Message[]) => void) => {
@@ -256,9 +220,8 @@ export const apiService = {
 
   getConversations: async (userId: string): Promise<User[]> => {
     await delay(50); // Reduced from 300ms
-    const response = await fetch(`${API_BASE_URL}/conversations?userId=${userId}`);
-    if (!response.ok) throw new Error('Failed to fetch conversations');
-    return response.json();
+    const response = await API.get(`/conversations?userId=${userId}`);
+    return response.data;
   },
 
   // --- QUIZ ---
@@ -270,30 +233,13 @@ export const apiService = {
       try {
         console.log(`Attempt ${retryCount + 1}: Generating quiz for ${skill} (${difficulty})`);
         
-        const response = await fetch('/api/quiz/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skill, difficulty })
-        });
+        const response = await API.post('/quiz/generate', { skill, difficulty });
         
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`API error (attempt ${retryCount + 1}):`, response.status, errorText);
-          
-          if (retryCount === maxRetries - 1) {
-            throw new Error(`Failed to generate quiz: ${response.status} ${errorText}`);
-          }
-          
-          retryCount++;
-          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-          continue;
-        }
-        
-        const data = await response.json();
+        const data = response.data;
         console.log('Quiz generated successfully:', data);
         return data;
         
-      } catch (error) {
+      } catch (error: any) {
         console.error(`Quiz generation error (attempt ${retryCount + 1}):`, error);
         
         if (retryCount === maxRetries - 1) {
