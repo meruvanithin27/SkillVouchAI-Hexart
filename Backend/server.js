@@ -845,7 +845,7 @@ app.delete('/api/skills/known/:skillName', protect, async (req, res) => {
     const { skillName } = req.params;
     const userId = req.user._id;
 
-    console.log(`➖ Removing known skill "${skillName}" for user ${userId}`);
+    console.log(`Removing known skill "${skillName}" for user ${userId}`);
 
     // Use $pull to remove specific skill without overwriting array
     const updatedUser = await User.findByIdAndUpdate(

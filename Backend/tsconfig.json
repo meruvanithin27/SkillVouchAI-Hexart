@@ -3,18 +3,23 @@
     "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "node",
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
     "noEmit": true,
     "strict": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitThis": false
   },
   "include": [
     "*.ts"
   ],
   "exclude": [
     "*.js",
+    "server.js",
     "node_modules",
-    "dist"
+    "dist",
+    "**/*.js"
   ]
 }
