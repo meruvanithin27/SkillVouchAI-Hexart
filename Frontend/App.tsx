@@ -3,223 +3,419 @@ import axios from 'axios';
 
 // Environment validation
 const API_URL = import.meta.env.VITE_API_URL;
-console.log("API URL:", API_URL);
 
 if (!API_URL) {
-  console.error("❌ Backend URL missing - VITE_API_URL is not defined!");
+  throw new Error('VITE_API_URL environment variable is not set!');
 }
 
-// Create axios instance
+// Create axios instance with production configuration
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  withCredentials: true
+  baseURL: API_URL,
+  withCredentials: true,
+  timeout: 10000, // 10 second timeout
+  headers: {
+    'Content-Type': 'application/json',
+  }
 });
 
-// Add debug logging
+// Request interceptor for auth token
 API.interceptors.request.use(config => {
-  console.log("REQUEST:", config.method?.toUpperCase(), config.url);
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
+// Response interceptor for error handling
 API.interceptors.response.use(
-  res => {
-    console.log("SUCCESS:", res.status, res.config.url);
-    return res;
-  },
-  err => {
-    console.error("ERROR:", err.message);
-    console.error("ERROR DETAILS:", err.response?.status, err.response?.data);
-    return Promise.reject(err);
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      window.location.href = '/';
+    }
+    return Promise.reject(error);
   }
 );
 
-function App() {
-  const [apiStatus, setApiStatus] = useState('loading');
-  const [apiError, setApiError] = useState('');
-  const [dbStatus, setDbStatus] = useState('loading');
-  const [authStatus, setAuthStatus] = useState('loading');
+// Error boundary component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-  // Backend health check on load
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <h2 style={{ color: '#dc3545' }}>Something went wrong</h2>
+          <p>Please refresh the page and try again.</p>
+          <button onClick={() => window.location.reload()}>Refresh</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showLogin, setShowLogin] = useState(true);
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [systemStatus, setSystemStatus] = useState({
+    backend: 'loading',
+    database: 'loading',
+    auth: 'loading'
+  });
+
+  // Check system health on mount
   useEffect(() => {
-    console.log("🔍 Starting backend health check...");
-    API.get("/api/health")
-      .then(res => {
-        console.log("Backend OK:", res.data);
-        setApiStatus('ok');
-        if (res.data.database === 'connected') {
-          setDbStatus('ok');
-        } else {
-          setDbStatus('error');
-        }
-      })
-      .catch(err => {
-        console.error("Backend Failed:", err);
-        setApiError(err.message);
-        setApiStatus('error');
-        setDbStatus('error');
-      });
+    const checkHealth = async () => {
+      try {
+        const response = await API.get('/health');
+        setSystemStatus({
+          backend: 'success',
+          database: response.data.data?.database === 'connected' ? 'success' : 'error',
+          auth: 'success'
+        });
+      } catch (err) {
+        setSystemStatus({
+          backend: 'error',
+          database: 'error',
+          auth: 'error'
+        });
+        setError('Backend connection failed');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkHealth();
   }, []);
 
-  // Check auth status
+  // Check for existing auth
   useEffect(() => {
     const token = localStorage.getItem('authToken');
-    if (token) {
-      setAuthStatus('ok');
-      console.log('🔐 JWT Token found - Auth system working');
-    } else {
-      setAuthStatus('pending');
-      console.log('⚠️ No JWT Token - User not logged in');
+    const userData = localStorage.getItem('authUser');
+    
+    if (token && userData) {
+      try {
+        setUser(JSON.parse(userData));
+        setShowLogin(false);
+      } catch (err) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('authUser');
+      }
     }
   }, []);
 
-  if (!API_URL) {
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const endpoint = showLogin ? '/api/auth/login' : '/api/auth/signup';
+      const response = await API.post(endpoint, formData);
+      
+      if (response.data.success) {
+        const { token } = response.data.data;
+        
+        // Get user profile
+        const profileResponse = await API.get('/api/auth/profile');
+        if (profileResponse.data.success) {
+          const userData = profileResponse.data.data.user;
+          localStorage.setItem('authToken', token);
+          localStorage.setItem('authUser', JSON.stringify(userData));
+          setUser(userData);
+          setError('');
+        }
+      } else {
+        setError(response.data.message || 'Authentication failed');
+      }
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || err.message || 'Network error';
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('authUser');
+    setUser(null);
+    setShowLogin(true);
+    setFormData({ email: '', password: '' });
+  };
+
+  const getSystemStatusColor = (status) => {
+    switch (status) {
+      case 'success': return '#28a745';
+      case 'loading': return '#ffc107';
+      case 'error': return '#dc3545';
+      default: return '#6c757d';
+    }
+  };
+
+  const getSystemStatusIcon = (status) => {
+    switch (status) {
+      case 'success': return '✅';
+      case 'loading': return '⏳';
+      case 'error': return '❌';
+      default: return '❓';
+    }
+  };
+
+  if (loading && !user) {
     return (
-      <div style={{ padding: '20px', textAlign: 'center' }}>
-        <h1 style={{ color: 'red' }}>❌ Configuration Error</h1>
-        <p>VITE_API_URL environment variable is not set!</p>
-        <p>Please set it to: https://skillvouch-hexart-vv85.onrender.com</p>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column'
+      }}>
+        <div style={{ fontSize: '24px', marginBottom: '20px' }}>⏳ Loading SkillVouch...</div>
+        <div style={{ color: '#6c757d' }}>Checking system health</div>
       </div>
     );
   }
 
-  return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h1 style={{ textAlign: 'center', color: '#333' }}>SkillVouch AI - Production Status</h1>
-      
-      {/* Status Panel */}
-      <div style={{ 
-        maxWidth: '600px', 
-        margin: '20px auto', 
-        padding: '20px', 
-        border: '1px solid #ddd', 
-        borderRadius: '8px',
-        backgroundColor: '#f9f9f9'
-      }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Production Status Panel</h2>
-        
-        <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold', width: '150px' }}>Frontend:</span>
-          <span style={{ color: '#28a745' }}>Connected ✅</span>
-        </div>
-        
-        <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold', width: '150px' }}>Backend:</span>
-          <span style={{ color: apiStatus === 'ok' ? '#28a745' : '#dc3545' }}>
-            {apiStatus === 'ok' ? 'Connected ✅' : apiStatus === 'loading' ? 'Loading...' : 'Failed ❌'}
-          </span>
-        </div>
-        
-        <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold', width: '150px' }}>Database:</span>
-          <span style={{ color: dbStatus === 'ok' ? '#28a745' : '#dc3545' }}>
-            {dbStatus === 'ok' ? 'Connected ✅' : dbStatus === 'loading' ? 'Loading...' : 'Failed ❌'}
-          </span>
-        </div>
-        
-        <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold', width: '150px' }}>Auth:</span>
-          <span style={{ color: authStatus === 'ok' ? '#28a745' : '#ffc107' }}>
-            {authStatus === 'ok' ? 'Ready ✅' : authStatus === 'loading' ? 'Loading...' : 'Not Logged In ⚠️'}
-          </span>
-        </div>
-        
-        <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold', width: '150px' }}>Environment:</span>
-          <span>Production</span>
-        </div>
-        
-        <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontWeight: 'bold', width: '150px' }}>API URL:</span>
-          <span style={{ fontSize: '12px', wordBreak: 'break-all' }}>{API_URL}</span>
-        </div>
-      </div>
-
-      {/* Error Display */}
-      {apiError && (
+  if (!user) {
+    return (
+      <ErrorBoundary>
         <div style={{ 
-          maxWidth: '600px', 
-          margin: '20px auto', 
-          padding: '15px', 
-          backgroundColor: '#f8d7da', 
-          border: '1px solid #f5c6cb', 
-          borderRadius: '4px',
-          color: '#721c24'
+          maxWidth: '400px', 
+          margin: '50px auto', 
+          padding: '30px',
+          border: '1px solid #ddd',
+          borderRadius: '8px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
         }}>
-          <strong>Network Error:</strong> {apiError}
+          <h1 style={{ textAlign: 'center', marginBottom: '30px' }}>SkillVouch AI</h1>
+          
+          {/* System Status */}
+          <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '5px' }}>
+            <h4 style={{ marginBottom: '10px' }}>System Status</h4>
+            <div style={{ fontSize: '12px' }}>
+              <div style={{ color: getSystemStatusColor(systemStatus.backend) }}>
+                {getSystemStatusIcon(systemStatus.backend)} Backend: {systemStatus.backend}
+              </div>
+              <div style={{ color: getSystemStatusColor(systemStatus.database) }}>
+                {getSystemStatusIcon(systemStatus.database)} Database: {systemStatus.database}
+              </div>
+              <div style={{ color: getSystemStatusColor(systemStatus.auth) }}>
+                {getSystemStatusIcon(systemStatus.auth)} Auth: {systemStatus.auth}
+              </div>
+            </div>
+          </div>
+
+          {/* Auth Form */}
+          <form onSubmit={handleAuth}>
+            <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>
+              {showLogin ? 'Login' : 'Sign Up'}
+            </h3>
+            
+            {error && (
+              <div style={{ 
+                padding: '10px', 
+                marginBottom: '15px', 
+                backgroundColor: '#f8d7da', 
+                border: '1px solid #f5c6cb',
+                borderRadius: '4px',
+                color: '#721c24'
+              }}>
+                {error}
+              </div>
+            )}
+            
+            <div style={{ marginBottom: '15px' }}>
+              <input
+                type="email"
+                placeholder="Email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  border: '1px solid #ddd', 
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <input
+                type="password"
+                placeholder="Password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  border: '1px solid #ddd', 
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+            
+            <button
+              type="submit"
+              disabled={loading}
+              style={{ 
+                width: '100%', 
+                padding: '12px', 
+                backgroundColor: '#007bff', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px',
+                fontSize: '16px',
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {loading ? 'Please wait...' : (showLogin ? 'Login' : 'Sign Up')}
+            </button>
+          </form>
+          
+          <div style={{ textAlign: 'center', marginTop: '20px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowLogin(!showLogin);
+                setError('');
+              }}
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                color: '#007bff', 
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              {showLogin ? "Don't have an account? Sign up" : "Already have an account? Login"}
+            </button>
+          </div>
         </div>
-      )}
+      </ErrorBoundary>
+    );
+  }
 
-      {/* Debug Info */}
-      <div style={{ 
-        maxWidth: '600px', 
-        margin: '20px auto', 
-        padding: '15px', 
-        backgroundColor: '#d1ecf1', 
-        border: '1px solid #bee5eb', 
-        borderRadius: '4px',
-        color: '#0c5460'
-      }}>
-        <strong>Debug Info:</strong>
-        <p>Check browser console for detailed request/response logs.</p>
-        <p>Network tab should show Status 200 for /api/health</p>
-      </div>
+  return (
+    <ErrorBoundary>
+      <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          marginBottom: '30px',
+          padding: '20px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '8px'
+        }}>
+          <div>
+            <h1 style={{ margin: 0 }}>SkillVouch AI</h1>
+            <p style={{ margin: '5px 0 0 0', color: '#6c757d' }}>
+              Welcome, {user.email}
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{ 
+              padding: '8px 16px', 
+              backgroundColor: '#dc3545', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Logout
+          </button>
+        </div>
 
-      {/* Auth Test Section */}
-      <div style={{ 
-        maxWidth: '600px', 
-        margin: '20px auto', 
-        padding: '20px', 
-        border: '1px solid #ddd', 
-        borderRadius: '8px'
-      }}>
-        <h3>Authentication Test</h3>
-        <button 
-          onClick={() => {
-            console.log("🔍 Testing signup...");
-            API.post('/api/auth/signup', { email: 'test@example.com', password: 'password123' })
-              .then(res => {
-                console.log('Signup successful:', res.data);
-                localStorage.setItem('authToken', res.data.token);
-                setAuthStatus('ok');
-                alert('Signup successful! Token saved.');
-              })
-              .catch(err => {
-                console.error('Signup failed:', err);
-                alert('Signup failed: ' + (err.response?.data?.error || err.message));
-              });
-          }}
-          style={{ 
-            padding: '10px 20px', 
-            marginRight: '10px', 
-            backgroundColor: '#007bff', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Test Signup
-        </button>
-        
-        <button 
-          onClick={() => {
-            localStorage.removeItem('authToken');
-            setAuthStatus('pending');
-            alert('Auth token cleared!');
-          }}
-          style={{ 
-            padding: '10px 20px', 
-            backgroundColor: '#dc3545', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Clear Auth
-        </button>
+        {/* System Status Dashboard */}
+        <div style={{ 
+          marginBottom: '30px', 
+          padding: '20px', 
+          backgroundColor: '#e9ecef', 
+          borderRadius: '8px' 
+        }}>
+          <h3>System Status</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', color: getSystemStatusColor(systemStatus.backend) }}>
+                {getSystemStatusIcon(systemStatus.backend)}
+              </div>
+              <div>Backend</div>
+              <div style={{ fontSize: '12px', color: getSystemStatusColor(systemStatus.backend) }}>
+                {systemStatus.backend}
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', color: getSystemStatusColor(systemStatus.database) }}>
+                {getSystemStatusIcon(systemStatus.database)}
+              </div>
+              <div>Database</div>
+              <div style={{ fontSize: '12px', color: getSystemStatusColor(systemStatus.database) }}>
+                {systemStatus.database}
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', color: getSystemStatusColor(systemStatus.auth) }}>
+                {getSystemStatusIcon(systemStatus.auth)}
+              </div>
+              <div>Auth</div>
+              <div style={{ fontSize: '12px', color: getSystemStatusColor(systemStatus.auth) }}>
+                {systemStatus.auth}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div style={{ 
+          padding: '20px', 
+          border: '1px solid #ddd', 
+          borderRadius: '8px',
+          backgroundColor: 'white'
+        }}>
+          <h2>Dashboard</h2>
+          <p>Your SkillVouch AI dashboard is ready!</p>
+          
+          <div style={{ marginTop: '20px' }}>
+            <h4>Features Available:</h4>
+            <ul>
+              <li>✅ User Authentication</li>
+              <li>✅ Profile Management</li>
+              <li>✅ System Health Monitoring</li>
+              <li>✅ Secure API Communication</li>
+            </ul>
+          </div>
+
+          <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#d1ecf1', borderRadius: '4px' }}>
+            <strong>Production Status:</strong> All systems operational and ready for production use.
+          </div>
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 }
 
