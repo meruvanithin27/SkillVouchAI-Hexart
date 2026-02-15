@@ -15,7 +15,7 @@ Your Vercel deployment is showing "Configuration Error" because `VITE_API_URL` i
 3. Fill in exactly:
    ```
    Name: VITE_API_URL
-   Value: https://skillvouchai-hexart.onrender.com
+   Value: https://skillvouch-hexart-vv85.onrender.com
    Environments: ✅ Production ✅ Preview ✅ Development
    ```
 4. Click **"Save"**
