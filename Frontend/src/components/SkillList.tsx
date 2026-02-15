@@ -45,9 +45,6 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
   const updateUserAndDB = async (updatedUser: User) => {
       console.log('🔄 Updating user state and database...');
       
-      // First update the local state for immediate UI feedback
-      onUpdateUser(updatedUser);
-      
       // Then fetch fresh data from backend to ensure consistency
       try {
         const freshUserData = await apiService.getProfile();
@@ -58,8 +55,10 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
         console.log('✅ User data synced with backend');
         
       } catch (error) {
-        console.error('⚠️ Failed to sync with backend, using local state:', error);
-        // Continue with local state - better than breaking the UI
+        console.error('⚠️ Failed to sync with backend, using provided state:', error);
+        // If sync fails, use the provided updatedUser as fallback
+        onUpdateUser(updatedUser);
+        localStorage.setItem('authUser', JSON.stringify(updatedUser));
       }
   };
 
@@ -70,21 +69,27 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
       if (activeTab === 'known') {
         console.log(`➕ Adding known skill: ${newSkillName}`);
         const updatedUser = await apiService.addKnownSkill(newSkillName, 'Beginner');
-        onUpdateUser(updatedUser);
-        localStorage.setItem('authUser', JSON.stringify(updatedUser));
+        await updateUserAndDB(updatedUser);
         console.log('✅ Known skill added successfully');
       } else {
         console.log(`➕ Adding skill to learn: ${newSkillName}`);
         const updatedUser = await apiService.addSkillToLearn(newSkillName, 'Medium');
-        onUpdateUser(updatedUser);
-        localStorage.setItem('authUser', JSON.stringify(updatedUser));
+        await updateUserAndDB(updatedUser);
         console.log('✅ Learning goal added successfully');
       }
       setNewSkillName('');
     } catch (error: any) {
       console.error('❌ Failed to add skill:', error);
-      // Show error to user
-      alert(error.response?.data?.message || 'Failed to add skill. Please try again.');
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      // Show more detailed error to user
+      const errorMessage = error.response?.data?.message || 
+                        error.message || 
+                        'Failed to add skill. Please try again.';
+      alert(errorMessage);
     }
   };
 
@@ -95,20 +100,26 @@ export const SkillList: React.FC<SkillListProps> = ({ user, onUpdateUser }) => {
         if (skill) {
           console.log(`➖ Removing known skill: ${skill.name}`);
           const updatedUser = await apiService.removeKnownSkill(skill.name);
-          onUpdateUser(updatedUser);
-          localStorage.setItem('authUser', JSON.stringify(updatedUser));
+          await updateUserAndDB(updatedUser);
           console.log('✅ Known skill removed successfully');
         }
       } else {
         console.log(`➖ Removing skill to learn: ${id}`);
         const updatedUser = await apiService.removeSkillToLearn(id);
-        onUpdateUser(updatedUser);
-        localStorage.setItem('authUser', JSON.stringify(updatedUser));
+        await updateUserAndDB(updatedUser);
         console.log('✅ Learning goal removed successfully');
       }
     } catch (error: any) {
       console.error('❌ Failed to remove skill:', error);
-      alert(error.response?.data?.message || 'Failed to remove skill. Please try again.');
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      const errorMessage = error.response?.data?.message || 
+                        error.message || 
+                        'Failed to remove skill. Please try again.';
+      alert(errorMessage);
     }
   };
 

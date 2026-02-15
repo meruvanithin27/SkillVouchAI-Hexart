@@ -18,6 +18,7 @@ export interface User {
   bio: string;
   discordLink?: string;
   rating: number; // 1-5
+  totalReviews?: number; // Total number of reviews
   languages?: string[]; // Languages user speaks
   preferredLanguage?: string; // Preferred language for communication
   availability?: string[]; // Available time slots
