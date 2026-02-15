@@ -15,6 +15,7 @@ import { QuizModal } from './src/components/QuizModal';
 import { ProfileView } from './src/components/ProfileView';
 import { Layout } from './src/components/Layout';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { apiService } from './src/services/apiService';
 
 // Import types
 import { User, View } from './src/types';
@@ -70,23 +71,60 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  // Check for existing auth on mount
+  // Check for existing auth on mount and sync with backend
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const userData = localStorage.getItem('authUser');
-    
-    if (token && userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
-        setCurrentView(View.DASHBOARD);
-      } catch (err) {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('authUser');
+    const initializeAuth = async () => {
+      const token = localStorage.getItem('authToken');
+      const userData = localStorage.getItem('authUser');
+      
+      if (token && userData) {
+        try {
+          // First load from localStorage for immediate UI
+          const parsedUser = JSON.parse(userData);
+          setUser(parsedUser);
+          setCurrentView(View.DASHBOARD);
+          
+          // Then fetch fresh data from backend to sync skills
+          try {
+            console.log('🔄 Syncing user data with backend...');
+            const freshUserData = await apiService.getProfile();
+            
+            // Transform backend user data to frontend format
+            const transformedUser = {
+              id: freshUserData._id,
+              name: freshUserData.name || freshUserData.email.split('@')[0],
+              email: freshUserData.email,
+              avatar: freshUserData.avatar || '',
+              skillsKnown: freshUserData.skillsKnown || [],
+              skillsToLearn: freshUserData.skillsToLearn || [],
+              bio: freshUserData.bio || '',
+              rating: freshUserData.rating || 5,
+              languages: freshUserData.languages || [],
+              preferredLanguage: freshUserData.preferredLanguage || 'English',
+              availability: freshUserData.availability || []
+            };
+            
+            // Update local state and storage with fresh data
+            setUser(transformedUser);
+            localStorage.setItem('authUser', JSON.stringify(transformedUser));
+            console.log('✅ User data synced with backend');
+            
+          } catch (syncError) {
+            console.warn('⚠️ Failed to sync with backend, using cached data:', syncError);
+            // Continue with cached data - better than logging out user
+          }
+          
+        } catch (err) {
+          console.error('❌ Failed to parse cached user data:', err);
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('authUser');
+        }
       }
-    }
-    setLoading(false);
-    setMounted(true);
+      setLoading(false);
+      setMounted(true);
+    };
+
+    initializeAuth();
   }, []);
 
   const handleLogout = () => {

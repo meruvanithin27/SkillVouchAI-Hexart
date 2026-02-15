@@ -101,6 +101,12 @@ export const apiService = {
     }
   },
 
+  // --- PROFILE ---
+  getProfile: async (): Promise<User> => {
+    const response = await API.get('/auth/profile');
+    return response.data.data.user;
+  },
+
   // --- AUTH ---
   login: async (email: string, password: string): Promise<User> => {
     console.log('🔐 Frontend login attempt for:', email);

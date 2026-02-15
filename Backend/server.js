@@ -446,10 +446,24 @@ app.get("/api/auth/profile", protect, async (req, res) => {
       });
     }
     
+    // Fetch fresh user data from database to ensure skills are included
+    const freshUser = await User.findById(req.user._id);
+    
+    if (!freshUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+    
+    console.log('📋 Profile requested for user:', freshUser.email, 'with', 
+                freshUser.skillsKnown?.length || 0, 'known skills and', 
+                freshUser.skillsToLearn?.length || 0, 'learning goals');
+    
     res.json({
       success: true,
       message: "Profile retrieved",
-      data: { user: req.user }
+      data: { user: freshUser }
     });
   } catch (error) {
     console.error('Profile error:', error);
