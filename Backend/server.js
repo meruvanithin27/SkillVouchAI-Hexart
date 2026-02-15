@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 10000;
 // Production-ready CORS configuration
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'https://skillvouch-hexart.vercel.app',
   'https://skillvouch-ai-frontend.vercel.app',
   'http://localhost:3001',
   'http://localhost:5173'
@@ -33,6 +34,7 @@ app.get('/api/health', (req, res) => {
   console.log('🔍 Health check requested');
   res.json({
     status: "ok",
+    message: "Backend Connected Successfully",
     timestamp: new Date(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',

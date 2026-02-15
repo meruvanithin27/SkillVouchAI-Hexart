@@ -31,6 +31,7 @@ API.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
       console.log('🔐 JWT Token: Present');
+      console.log('🔑 JWT received:', token.substring(0, 20) + '...');
     } else {
       console.log('⚠️ JWT Token: Missing');
     }
